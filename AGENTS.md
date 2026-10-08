@@ -215,7 +215,11 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
 
 **Implemented 2026-10-08** as `:core:ocr` plus the settings section "OCR engine and models" (`app/settings/OcrSection.kt`). Awaiting the user's on-device test. The OCR *pipeline* and module aren't built yet.
 
-- **Nothing is bundled.** The engine and models are downloaded on demand, kept in `filesDir/ocr/<componentId>/`, and removable (with confirmation).
+- **Nothing is bundled.** The engine and models are downloaded on demand, kept in **`noBackupFilesDir/ocr/<componentId>/`**, and removable (with confirmation). Uninstalling deletes them.
+  - **Why no-backup storage:** Auto Backup includes `filesDir`, and with more than 25 MB it "doesn't back up data to the cloud" at all (developer.android.com/identity/data/autobackup). The ~170 MB of OCR files would silently stop the settings from being backed up.
+  - `getNoBackupFilesDir()` is excluded by default on every API level, so no XML rules are needed.
+  - Downloads from earlier builds in `filesDir/ocr` are moved on first start.
+  - XGesture has this problem: it keeps models in `filesDir` and its backup rules don't exclude them.
 - **`OcrCatalog`** pins every file with size and SHA-256 and lists URLs in order; any byte-identical mirror is acceptable. All values were verified 2026-10-08:
   - **Engine:** ONNX Runtime **1.30.0** AAR from Maven Central, 53,040,218 B, SHA-256 `e7fb945e…73f1`.
     - Its SHA-1 `656d9413…` equals Maven Central's published `.sha1`.

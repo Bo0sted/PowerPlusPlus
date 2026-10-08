@@ -39,7 +39,12 @@ class OcrComponents @Inject constructor(@ApplicationContext private val context:
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val jobs = HashMap<String, Job>()
-    private val root = File(context.filesDir, "ocr")
+    /**
+     * Downloads live in no-backup storage: Auto Backup includes filesDir, and with more than 25 MB
+     * it backs up nothing at all — the ~170 MB of OCR files would silently stop the settings from
+     * being backed up. Both locations are deleted on uninstall.
+     */
+    private val root = File(context.noBackupFilesDir, "ocr").also { migrateFrom(File(context.filesDir, "ocr"), it) }
 
     private val states = MutableStateFlow(OcrCatalog.ALL.associate { it.id to initialState(it) })
     val state: StateFlow<Map<String, ComponentState>> = states.asStateFlow()
@@ -139,6 +144,15 @@ class OcrComponents @Inject constructor(@ApplicationContext private val context:
             val partial = File(target.parentFile, "$ENGINE_LIBRARY.part")
             zip.getInputStream(entry).use { input -> partial.outputStream().use { input.copyTo(it) } }
             check(partial.renameTo(target)) { "rename failed" }
+        }
+    }
+
+    /** Moves downloads made by earlier builds out of backed-up storage (same filesystem: a rename). */
+    private fun migrateFrom(old: File, new: File) {
+        if (!old.isDirectory) return
+        if (new.exists() || !old.renameTo(new)) {
+            Log.w(TAG, "Couldn't move $old to $new; removing the old copy")
+            old.deleteRecursively()
         }
     }
 
