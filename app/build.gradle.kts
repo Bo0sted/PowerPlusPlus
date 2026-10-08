@@ -23,6 +23,17 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:ui"))
+    implementation(project(":core:module"))
+    implementation(project(":core:data"))
+    implementation(project(":core:overlay"))
+
+    // Panel modules. Adding one here is all it takes to make it available in the editor.
+    implementation(project(":module:powermenu"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
 }

@@ -1,3 +1,40 @@
 <resources>
     <string name="app_name">Power++</string>
+    <string name="accessibility_description">Lets Power++ show its panel over other apps, open the system power menu, read on-screen text and take screenshots when you use a module. Nothing is read or captured otherwise.</string>
+
+    <string name="action_cancel">Cancel</string>
+
+    <string name="setup_title">Setup</string>
+    <string name="setup_accessibility_title">Accessibility service</string>
+    <string name="setup_accessibility_body">Turn on Power++ under Accessibility → Downloaded apps. If the switch is greyed out, open App info, tap ⋮ and choose Allow restricted settings first.</string>
+    <string name="setup_accessibility_action">Open Accessibility</string>
+    <string name="setup_app_info_action">App info</string>
+    <string name="setup_assistant_title">Digital assistant</string>
+    <string name="setup_assistant_body">Choose Power++ as the Digital assistant app in Default apps.</string>
+    <string name="setup_assistant_action">Open Default apps</string>
+    <string name="setup_power_button_title">Power button</string>
+    <string name="setup_power_button_body">In Settings → System → Gestures → Press and hold power button, choose Digital assistant.</string>
+    <string name="setup_try_panel">Open the panel now</string>
+
+    <string name="layout_title">Layout</string>
+    <string name="layout_page">Page %1$d</string>
+    <string name="layout_add_page">Add page</string>
+    <string name="layout_remove_page">Remove this page</string>
+    <string name="layout_moving_hint">Tap where it should go</string>
+    <string name="layout_unknown_module">Unavailable</string>
+    <string name="layout_add_module">Add a module</string>
+    <string name="layout_module_enabled">Show on panel</string>
+    <string name="layout_move">Move</string>
+    <string name="layout_remove">Remove</string>
+
+    <string name="appearance_title">Appearance</string>
+    <string name="appearance_columns">Columns</string>
+    <string name="appearance_rows">Rows</string>
+    <string name="appearance_swipe">Switch pages by swiping</string>
+    <string name="appearance_swipe_vertical">Up and down</string>
+    <string name="appearance_swipe_horizontal">Left and right</string>
+    <string name="appearance_background">Background</string>
+    <string name="appearance_background_blur">Blur</string>
+    <string name="appearance_background_dim">Dimmed black</string>
+    <string name="appearance_background_hint">Blur switches to dimmed black automatically when the device can\'t blur, such as in battery saver.</string>
 </resources>

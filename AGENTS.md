@@ -4,8 +4,11 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-- **Current phase:** scaffolding the Gradle project (§5). The toolchain is installed (§6).
-- **Next action:** finish the scaffold and get it compiling. Then build the overlay + page/module framework (§2) before any v1 module (§3).
+- **Current phase:** the core framework is built and compiles, and lint is clean (§5, §10). The Power menu module exists. **Nothing has run on a device yet.**
+- **Next action:**
+  1. Install on the Pixel and smoke-test: the setup flow, power long-press → panel, blur/dim, Back, page swiping, the editor, and the Power menu module.
+  2. Then the shared text-pick UI and the Accessibility text search module (§3.2).
+  3. Then Smart screenshot (§3.4), then OCR (§3.3, §4).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mat+github@inboxmc.com>` (the machine's global git identity).
 - **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. No XGesture code is copied verbatim; where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
@@ -105,14 +108,45 @@ A separate module from 3.2. The flow:
   2. **Load check:** after download, an ONNX Runtime session is opened and the input/output signature is checked against what the pipeline expects. The recognition output size must match the dictionary. The model is marked installed only if this passes.
 - **Android 17 note:** with `targetSdk >= 37`, `System.load()` rejects writable files. Make downloaded `.so` files read-only before loading.
 
-## 5. Tech stack
+## 5. Architecture
 
-- Kotlin, Jetpack Compose, Hilt, DataStore, Gradle version catalog.
-- Multi-module: `app`, `core:*`, and one `module:*` per feature.
-- minSdk 31, compileSdk 37, targetSdk 37.
-- Use the latest stable AGP, Kotlin and Compose BOM at scaffold time; check them, don't copy versions from XGesture.
+- **Stack:** Kotlin (AGP 9 built-in Kotlin; never apply `org.jetbrains.kotlin.android`), Jetpack Compose + Material 3 (dynamic color), Hilt via KSP, DataStore with kotlinx.serialization JSON.
+- **SDK levels:** minSdk 31, compileSdk 37, targetSdk 37. These live in `build-logic/src/main/kotlin/PowerBuildConfig.kt`.
+
+### Gradle modules
+
+| Module | Role |
+|---|---|
+| `build-logic` | Included build with the convention plugins: `powerpp.android.application`, `powerpp.android.library`, `powerpp.android.compose`, `powerpp.hilt`, `powerpp.serialization`, `powerpp.panel.module`. Modules apply plugins **only** through these; AGP, KSP and the rest are on build-logic's classpath, not resolvable by id directly. |
+| `:core:ui` | `PowerTheme` |
+| `:core:module` | The module SPI: `PanelModule` (sealed), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService` plus a scope tied to the connection), `ModuleRegistry` |
+| `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. |
+| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners, Back handling, and blur with live fallback to dim. Single use: create a new one each time. |
+| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`. |
+| `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`), and the settings UI (`settings/`: setup checklist, layout editor, appearance). |
+
+### Adding a module type
+1. Create `module/<name>` with `plugins { id("powerpp.panel.module") }` and a `namespace`.
+2. Implement `ActionModule` or `ToggleModule` with a new, never-changing `typeId`, and bind it `@IntoSet`.
+3. Add `include(":module:<name>")` to `settings.gradle.kts` and `implementation(project(":module:<name>"))` to `app/build.gradle.kts`.
+
+Nothing else changes.
+
+### Behavior notes
+- The panel reads the config as a hot `StateFlow`, so it opens instantly and reflects edits live.
+- Toggle states are collected while the panel is showing.
+- Empty cells and unknown `typeId`s (a module that was removed from the build) render as blank space in the panel and as "Unavailable" in the editor. They're never deleted automatically.
+- Shrinking the grid reflows overflowing modules into free cells, appending pages as needed. Nothing is dropped.
+- The editor can't place modules on the panel's backdrop; tapping any non-module area of the panel dismisses it.
 
 ## 6. Build environment
+
+**Commands:**
+- `./gradlew :app:assembleDebug` builds the debug APK.
+- `./gradlew :core:data:testDebugUnitTest` runs the unit tests.
+- `./gradlew :app:lintDebug` (and `:<module>:lintDebug`) runs lint. Keep lint at zero issues.
+- The single remaining Gradle deprecation warning (`Configuration.setVisible`) comes from a third-party plugin, not our scripts.
+- On first build, AGP auto-installed `build-tools;36.0.0` and `platform-tools` from Google, under the licenses already accepted.
 
 **Machine:** Arch Linux. The user requires tools from **Arch's official repos only, never the AUR**.
 
@@ -179,14 +213,63 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 
 ## 10. Status
 
-- **Done:** requirements gathered; XGesture reviewed; repository initialized; this file written.
-- **In progress:** waiting on §7. The user needs to install `jdk21-openjdk`.
-- **Not started:** everything in code.
+**Done:**
+- Requirements gathered; XGesture reviewed; toolchain installed.
+- Gradle scaffold with convention plugins.
+- Module SPI, panel config with edits and tests, overlay window.
+- Assistant trigger, accessibility service, panel UI, settings UI (setup checklist, layout editor, appearance).
+- Power menu module.
+- Lint is clean across all modules.
 
-## 11. Open technical questions
+**Not yet done:**
+- **No on-device testing.** Every behavior above is compile-verified only.
+- Accessibility text search, Smart screenshot, OCR text search, and the OCR model/engine manager.
 
-- Is a `RecognitionService` stub required for Power++ to appear in the Digital assistant picker on Android 17? Verify against AOSP and on the device.
-- Is `takeScreenshot` latency and rate-limiting (about 1 call per 333 ms) good enough for XGesture-like capture?
+## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
+
+Re-verify only if the target platform changes.
+
+**Assistant role** (`AssistantRoleBehavior`, `VoiceInteractionServiceInfo`, `VoiceInteractionManagerService`):
+- The service needs `BIND_VOICE_INTERACTION`, and its metadata needs `sessionService`, `recognitionService` and `supportsAssist="true"`.
+- The role is `requestable="false"`, so the app can't request it; onboarding sends the user to `Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS`.
+- Becoming the assistant writes only `Settings.Secure.ASSISTANT` and `VOICE_INTERACTION_SERVICE`. It never changes the default speech recognizer, which is chosen only among services with the `RecognitionService` intent filter.
+- From Android 12, `recognitionService` "does nothing" but must be non-null. Ours points to `UnusedRecognitionService`, which has **no intent filter**.
+
+**Session** (`VoiceInteractionSession`):
+- `setUiEnabled(false)` belongs in `onPrepareShow`, as its Javadoc says.
+- `onShow` still runs with the UI disabled, and no window is ever added.
+- Use `hide()`, not `finish()`.
+- `startAssistantActivity` launches into a separate assistant layer.
+
+**Overlays:**
+- `PhoneWindowManager.checkAddPermission` allows `TYPE_ACCESSIBILITY_OVERLAY` without `SYSTEM_ALERT_WINDOW`; it's gated only by the `OP_CREATE_ACCESSIBILITY_OVERLAY` app-op.
+- The WindowManager must be obtained from the `AccessibilityService` itself; `getSystemService` sets the service's window token as the default.
+- Windows added via `WindowManager.addView` get hardware acceleration **only** with an explicit `FLAG_HARDWARE_ACCELERATED` (`ViewRootImpl.enableHardwareAcceleration`).
+- Blur behind needs `FLAG_BLUR_BEHIND` plus `blurBehindRadius`.
+- `addCrossWindowBlurEnabledListener` fires immediately with the current state, then on every change.
+
+**Back:**
+- With callbacks enabled (targetSdk 36+ on Android 16+, or the manifest `enableOnBackInvokedCallback`), `ViewRootImpl` routes Back to `OnBackInvokedCallback` before views; views never get `KEYCODE_BACK`.
+- The app opts in on API 33+. API 31–32 use the key event.
+
+**Accessibility:**
+- `GLOBAL_ACTION_POWER_DIALOG` = 6 (API 21).
+- `takeScreenshot(displayId, executor, callback)` requires `canTakeScreenshot` in the metadata, and is rate-limited to one call per 333 ms (`ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT`).
+- `takeScreenshotOfWindow` also exists.
+
+**ONNX Runtime 1.30 Java:** on Android, `OnnxRuntime.init()` only `loadLibrary`s `onnxruntime4j_jni` (see §4).
+
+**Libraries:**
+- `hiltViewModel()` is in package `androidx.hilt.lifecycle.viewmodel.compose` (artifact `hilt-lifecycle-viewmodel-compose` 1.4.0).
+- AGP 9.4 requires Gradle ≥ 9.6.0.
+- Hilt Gradle plugin ≥ 2.59 requires AGP 9.
+- KSP 2.3.10+ fixed AGP 9 built-in Kotlin.
+- Compose still needs `buildFeatures.compose = true`.
+
+## 11b. Open technical questions
+
+- Is `takeScreenshot` latency and rate-limiting good enough for XGesture-like capture?
+- What does the Pixel's power long-press pass in `onShow` args (`invocation_type`)? Not needed yet; would allow distinguishing the power button from other assistant gestures.
 
 ## 12. Known risks and potential bugs
 

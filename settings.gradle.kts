@@ -18,3 +18,8 @@ dependencyResolutionManagement {
 rootProject.name = "PowerPlusPlus"
 
 include(":app")
+include(":core:ui")
+include(":core:module")
+include(":core:data")
+include(":core:overlay")
+include(":module:powermenu")
