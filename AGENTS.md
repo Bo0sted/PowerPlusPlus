@@ -95,7 +95,7 @@ A separate module from 3.2. The flow:
     - Before first use, the downloaded `libonnxruntime.so` (arm64, taken from the official `onnxruntime-android` AAR on Maven Central and checked by SHA-256) is made read-only and loaded with `System.load(absolutePath)`.
     - When the glue library loads afterwards, the dynamic linker finds an already-loaded library with that soname and reuses it.
     - The glue library has no inference ability without the downloaded engine.
-    - **No NDK or own JNI is needed.** (The NDK and CMake were installed into `~/Android/Sdk` before this was understood; they're unused and can be removed.)
+    - **No NDK or own JNI is needed.**
     - The glue library and the engine **must come from the same ORT version**. Pin both in one place.
   - Pre- and post-processing (DBNet boxes, CTC decoding) is done in Kotlin, so OpenCV isn't needed.
   - Alternatives, each requiring converted, non-official model files:
@@ -162,7 +162,7 @@ Nothing else changes.
   - `cmdline-tools;latest` (23.0, SHA-1 verified against Google's `repository2-3.xml`)
   - `platforms;android-37.0`
   - `build-tools;37.0.0`
-  - `ndk;30.0.16248370` and `cmake;4.1.2`, which are unused (§4)
+  - The NDK and CMake were installed and later removed at the user's request (2026-10-08); nothing needs native code.
   - The SDK licenses were accepted with the user's approval.
 - **Gradle:** the wrapper, pinned to **9.8.1** with `distributionSha256Sum`. It was generated from the official distribution, SHA-256 verified.
 - **Versions at scaffold time:** see `gradle/libs.versions.toml` (AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Compose BOM 2026.09.00).
