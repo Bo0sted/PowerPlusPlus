@@ -10,8 +10,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   2. ~~The text-pick UI and Screen text (§3.2)~~: done, and the user confirmed it works.
   3. ~~Smart screenshot step 1 + activation capture~~: the user confirmed it works on-device. The banking app is captured with its real content, and Copy and Save work.
   4. Smart screenshot step-2 editor: built.
-     - The user found: missing top-bar buttons, stroke lag, and no editable text. All fixed 2026-10-08, **awaiting re-test**.
-     - Max/Default is also awaiting test.
+     - The user found: missing top-bar buttons, stroke lag, and no editable text. All fixed 2026-10-08, **and the user confirmed everything works**, including Max/Default.
   5. Then OCR (§3.3, §4).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
@@ -152,7 +151,7 @@ A separate module from 3.2. The flow:
   - While selected, the bottom panel shows `LabelOptions`: palette, size slider, **Background** switch, Edit text (prefilled dialog), Delete.
   - Tapping elsewhere or switching tool deselects.
 - **Editor UI:**
-  - top bar: Close · Undo · Redo · **Copy · Save · Share** (each renders, outputs, then closes the editor). The whole screen sits in a `Surface(contentColor = White)`; without it the top-bar icons defaulted to black on black and looked missing.
+  - **action row at the very bottom** (user, 2026-10-08, for thumb reach), below the tool row: Close · Undo · Redo · **Copy · Save · Share** (each renders, outputs, then closes the editor). The whole screen sits in a `Surface(contentColor = White)`; without it the top-bar icons defaulted to black on black and looked missing.
   - bottom: tool options above the tool row (Pen · Arrow · Rectangle · Oval · Text · Blur · Pixelate)
   - Text: tap the image → a dialog with a text field → the label is placed at the tap point
 

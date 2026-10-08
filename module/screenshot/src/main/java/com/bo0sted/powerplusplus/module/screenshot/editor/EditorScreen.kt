@@ -98,8 +98,8 @@ private sealed interface TextDialog {
 }
 
 /**
- * Step 2 of Smart screenshot: annotate the cropped image. Top bar: Close, Undo, Redo, Copy, Save,
- * Share. Bottom: options for the current tool (or the selected text) above the tool row.
+ * Step 2 of Smart screenshot: annotate the cropped image. Bottom, from top to bottom: options for
+ * the current tool (or the selected text), the tool row, then Close, Undo, Redo, Copy, Save, Share.
  *
  * Drawing is split into two layers so a stroke in progress never redraws everything else: the
  * image and finished marks render into a cached offscreen layer that is only redrawn when they
@@ -144,19 +144,9 @@ internal fun EditorScreen(
         }
     }
 
-    // A Surface supplies the content colour; without it the top bar's icons were black on black.
+    // A Surface supplies the content colour; without it icons outside the bottom panel were black on black.
     Surface(color = Color.Black, contentColor = Color.White) {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                BarButton(Icons.Rounded.Close, R.string.editor_close, onClick = onClose)
-                Spacer(Modifier.weight(1f))
-                BarButton(Icons.AutoMirrored.Rounded.Undo, R.string.editor_undo, enabled = viewModel.history.canUndo) { viewModel.undo() }
-                BarButton(Icons.AutoMirrored.Rounded.Redo, R.string.editor_redo, enabled = viewModel.history.canRedo) { viewModel.redo() }
-                BarButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onOutput(EditorOutput.Copy) }
-                BarButton(Icons.Rounded.Save, R.string.screenshot_save) { onOutput(EditorOutput.Save) }
-                BarButton(Icons.Rounded.Share, R.string.screenshot_share) { onOutput(EditorOutput.Share) }
-            }
-
             Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { viewSize = it }) {
                 // Finished marks: cached offscreen, redrawn only when the marks or effects change.
                 Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
@@ -293,6 +283,16 @@ internal fun EditorScreen(
                         ToolButton(EditorTool.Text, Icons.Rounded.TextFields, R.string.editor_tool_text, tool, select)
                         ToolButton(EditorTool.Blur, Icons.Rounded.BlurOn, R.string.editor_tool_blur, tool, select)
                         ToolButton(EditorTool.Pixelate, Icons.Rounded.GridOn, R.string.editor_tool_pixelate, tool, select)
+                    }
+                    // Actions last, at the very bottom, within thumb reach.
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        BarButton(Icons.Rounded.Close, R.string.editor_close, onClick = onClose)
+                        Spacer(Modifier.weight(1f))
+                        BarButton(Icons.AutoMirrored.Rounded.Undo, R.string.editor_undo, enabled = viewModel.history.canUndo) { viewModel.undo() }
+                        BarButton(Icons.AutoMirrored.Rounded.Redo, R.string.editor_redo, enabled = viewModel.history.canRedo) { viewModel.redo() }
+                        BarButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onOutput(EditorOutput.Copy) }
+                        BarButton(Icons.Rounded.Save, R.string.screenshot_save) { onOutput(EditorOutput.Save) }
+                        BarButton(Icons.Rounded.Share, R.string.screenshot_share) { onOutput(EditorOutput.Share) }
                     }
                 }
             }
