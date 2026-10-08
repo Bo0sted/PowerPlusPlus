@@ -17,7 +17,11 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,7 +78,13 @@ internal fun PanelScreen(
         }
         PageIndicator(pagerState, config.swipeAxis, Modifier.align(
             if (config.swipeAxis == SwipeAxis.Vertical) Alignment.CenterEnd else Alignment.BottomCenter,
-        ))
+        ).padding(bottom = if (config.swipeAxis == SwipeAxis.Horizontal) 72.dp else 0.dp))
+        FilledTonalIconButton(
+            onClick = onDismiss,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).size(56.dp),
+        ) {
+            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.panel_close))
+        }
     }
 }
 

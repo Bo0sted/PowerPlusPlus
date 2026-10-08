@@ -100,7 +100,14 @@ A separate module from 3.2. The flow:
 - **Verified facts** (AOSP `main`):
   - `AccessibilityService.takeScreenshot` → `WindowManagerService.captureDisplay(displayId, null, …)`. The default `CaptureArgs` has `captureSecureLayers = false`, so **`FLAG_SECURE` windows are always black**; no third-party method can avoid that.
   - It does **not** notify the app's `Activity.ScreenCaptureCallback` (Android 14 screenshot detection). That's fired only via `IWindowManager.notifyScreenshotListeners`, which "should be invoked only by SysUI" (the user's hardware-key screenshots).
-- **Unverified hypothesis:** the apps may hide because our panel window is focusable and takes input focus (`onWindowFocusChanged(false)`). A non-focusable panel might stop the hiding entirely, but then Back wouldn't reach the panel. Needs an on-device experiment with the user's app.
+- **Confirmed on-device (2026-10-08, the user's banking app):** the app hides when it **loses input focus**.
+  - With the panel made non-focusable (`FLAG_NOT_FOCUSABLE`), opening the panel no longer hides it.
+  - The focusable Screen-text overlay still does.
+  - The panel is now permanently non-focusable and has a Close button. Back goes to the app underneath.
+- **Decision pending (§7):** capture at activation (in `PowerSession.onShow`, before the panel window exists) rather than when a module is tapped.
+  - Capturing on tap races our own panel's removal: there's no reliable signal that the removal has been composited, so the blurred panel could end up in the shot.
+  - Capturing at activation is strictly ordered: the app still has focus and nothing of ours is on screen yet.
+  - Proposed gating: capture only if the panel contains a module that uses the screenshot.
 
 ### 3.6 Smart screenshot selection shapes (user, 2026-10-08)
 - Default: a resizable rectangle in the center (like XGesture).
@@ -204,7 +211,13 @@ Nothing else changes.
 
 ## 7. Open questions waiting on the user
 
-1. **Activation screenshot details** (§3.5), see the questions sent 2026-10-08: whether to capture only when the panel holds a module that can use it; whether to run the focus experiment first; the circle crop output; whether the full-width/full-height bands can be dragged as well as resized.
+1. **Activation screenshot details** (§3.5), asked 2026-10-08:
+   - Capture at activation (recommended) vs. on module tap.
+   - Capture only when the panel holds a module that can use it.
+   - Make the module overlays (text pick, later screenshot/OCR) non-focusable too, so apps don't hide behind them (Back would then go to the app; they all have Close).
+   - Circle crop output: transparent corners (PNG) recommended.
+   - Whether the full-width/full-height bands can be dragged as well as resized.
+   - (The focus experiment is done; see §3.5.)
 2. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
 
 ## 8. Decision log

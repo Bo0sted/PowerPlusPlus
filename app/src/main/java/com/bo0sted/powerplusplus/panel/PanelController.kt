@@ -64,7 +64,9 @@ class PanelController @Inject constructor(
             Backdrop.Dim -> OverlayBackdrop.Dim()
         }
 
-        val overlay = OverlayWindow(host.service, backdrop, onDismissRequest = ::dismiss)
+        // Not focusable, so the app underneath never loses focus: some apps (e.g. banking) hide
+        // their content on focus loss. Back therefore goes to that app; the panel has a Close button.
+        val overlay = OverlayWindow(host.service, backdrop, focusable = false, onDismissRequest = ::dismiss)
         window = overlay
         overlay.show {
             val current by config.collectAsStateWithLifecycle()
