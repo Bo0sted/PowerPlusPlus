@@ -4,8 +4,8 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-- **Current phase:** pre-scaffold. Requirements are agreed; the build environment and the questions in §7 are waiting on the user.
-- **Next action once the user answers §7:** set up the environment (§6), scaffold the Gradle project (§5), then build the overlay + page/module framework (§2) before any v1 module (§3).
+- **Current phase:** pre-scaffold. Requirements are agreed. Waiting on the user for the two open items in §7 (the OCR inference engine and the Android SDK source).
+- **Next action once the user answers §7:** the user installs the JDK (§6), then set up the SDK, scaffold the Gradle project (§5), then build the overlay + page/module framework (§2) before any v1 module (§3).
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mat+github@inboxmc.com>` (the machine's global git identity).
 - **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. No XGesture code is copied verbatim; where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
 
@@ -25,14 +25,18 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - The user sets *Settings → System → Gestures → Press & hold power button → Digital assistant*. On Pixel and AOSP-like Android 12+ devices, a long-press then starts our session.
 - When the session is shown, it immediately hands off to the overlay (§2.2) and finishes itself.
 - **No root and no LSPosed.** The user rejected them because the platform supports this natively.
-- **Known limit:** Samsung One UI's side key can't be assigned to a third-party assistant there. A fallback trigger for such devices is an open question (§7).
+- **Devices where power long-press can't open a third-party assistant (e.g. Samsung One UI) are not supported in v1.** There is no fallback trigger. A later version may add one.
+- Taking over the assistant role replaces Gemini/Google Assistant. The user accepts this.
 
 ### 2.2 Overlay
 - **Blurred background** by default, with an optional setting for a **dimmed black** background (better performance).
 - The overlay must automatically fall back to dim whenever cross-window blur is unavailable, for example in battery saver. Use `WindowManager.isCrossWindowBlurEnabled` and `addCrossWindowBlurEnabledListener`, and switch live.
 - Dismissed by tapping outside the modules or pressing Back.
-- **Pages:** swipe between pages, vertically by default; horizontal is a setting. Each page holds the modules the user assigns to it. The grid shape is still open (§7).
-- **Window type (proposed, awaiting sign-off in §7):** `TYPE_ACCESSIBILITY_OVERLAY`, drawn by our AccessibilityService. The service is required anyway (text search, screenshots, power menu), and this window type needs no "Display over other apps" permission. The user originally expected that permission to be required.
+- **Pages:** each page is a **grid of single-cell modules**, like a launcher home screen. Swipe between pages, up/down by default; left/right is a setting. Each page holds the modules the user assigns to it. Keep the data model open to multi-cell modules later, but v1 is 1×1 only.
+- **Window type (decided):** `TYPE_ACCESSIBILITY_OVERLAY`, added through the WindowManager of our connected AccessibilityService. **Power++ does not request `SYSTEM_ALERT_WINDOW`.** This was verified in AOSP:
+  - `PhoneWindowManager.checkAddPermission` lets `TYPE_ACCESSIBILITY_OVERLAY` through, gated only by the `OP_CREATE_ACCESSIBILITY_OVERLAY` app-op on newer releases, and never by `SYSTEM_ALERT_WINDOW`.
+  - The `TYPE_APPLICATION_OVERLAY` Javadoc is what requires `SYSTEM_ALERT_WINDOW`.
+  - XGesture asks for both only because many of its features work with accessibility turned off, so it falls back to `TYPE_APPLICATION_OVERLAY` (see `overlay/OverlayWindowTypes.kt`). Power++ can't run at all without its accessibility service, so it has no such fallback.
 
 ### 2.3 Modules
 - A module is **a button (action) or a toggle**.
@@ -54,7 +58,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 ### 3.2 Accessibility text search
 - Reads on-screen text from the accessibility node tree. Tappable boxes are drawn over each text item, and the user selects text and acts on it.
 - The final look and behavior should be **very similar to XGesture's** text pick and result panel (§9).
-- Which actions the result panel offers in v1 is open (§7).
+- **v1 offers a single action on selected text: Copy.** More actions (search, translate…) may come later.
 
 ### 3.3 OCR text search
 A separate module from 3.2. The flow:
@@ -77,7 +81,16 @@ A separate module from 3.2. The flow:
   - **Primary source:** `huggingface.co/PaddlePaddle`, the official PaddlePaddle organization. URLs should be pinned to a commit, not `main`. Current XGesture URLs and hashes (useful as a starting point and for cross-checking) are in XGesture's `core/ocr/src/main/assets/ocr_models.json`, entry `ppocrv6-medium`.
   - **Mirror:** ModelScope (also official PaddlePaddle). It's unconfirmed whether its files are byte-identical to Hugging Face's; this must be checked.
 - **Adding sources:** the catalog lets a model list several mirror URLs, so new sites can be added later. The user wants this.
-- **Runtime:** ONNX Runtime from Microsoft's official Maven Central artifact (`com.microsoft.onnxruntime:onnxruntime-android`). Only the arm64 `.so` files are downloaded and verified by SHA-256. Avoid OpenCV by doing pre- and post-processing (DBNet boxes, CTC decoding) in Kotlin. How the ORT Java API is made to load libraries from app storage is still open (§7).
+- **Runtime (proposed; the user questioned it, see §7):** an on-device inference engine is required to run any `.onnx` model.
+  - The proposal is ONNX Runtime: an open-source (MIT) library published by Microsoft on Maven Central (`com.microsoft.onnxruntime:onnxruntime-android`). It runs entirely in-process, offline.
+  - It's proposed because PaddlePaddle publishes PP-OCRv6 officially as ONNX, so the official files and hashes are used as-is, with no conversion.
+  - Only the arm64 `.so` files would be downloaded and verified by SHA-256.
+  - Pre- and post-processing (DBNet boxes, CTC decoding) is done in Kotlin, so OpenCV isn't needed.
+  - Alternatives, each requiring converted, non-official model files:
+    - Paddle Lite (Baidu, PaddleOCR's own mobile engine, `.nb` format)
+    - NCNN (Tencent)
+    - MNN (Alibaba)
+    - LiteRT (Google)
 - **Checking downloads (two layers).** The user doesn't know the model file formats and wants every download checked.
   1. **Hash pinning:** every file in the catalog has a fixed SHA-256 and size; a download that doesn't match is discarded. This is what XGesture does (per-file SHA-256 plus a minimum size, then a `manifest.json` written on install). It means a file can only be a known-good artifact, whichever mirror served it.
   2. **Load check:** after download, an ONNX Runtime session is opened and the input/output signature is checked against what the pipeline expects. The recognition output size must match the dictionary. The model is marked installed only if this passes.
@@ -90,27 +103,31 @@ A separate module from 3.2. The flow:
 - minSdk 31, compileSdk 37, targetSdk 37.
 - Use the latest stable AGP, Kotlin and Compose BOM at scaffold time; check them, don't copy versions from XGesture.
 
-## 6. Build environment (proposed, awaiting approval)
+## 6. Build environment
 
-**Machine:** Arch Linux. Facts as of 2026-10-08:
+**Machine:** Arch Linux. The user requires tools from **Arch's official repos only, never the AUR**.
+
+**State as of 2026-10-08:**
 - Only OpenJDK 17 is installed (the default).
 - No Android SDK (`~/Android/Sdk` doesn't exist, `ANDROID_HOME` is unset).
-- `adb` is at `/usr/bin/adb`.
+- `adb` is at `/usr/bin/adb`, from `extra/android-tools`.
 - No device is attached.
 
-**Proposal:**
-- **JDK:** Gradle runs on the existing JDK 17. Compilation uses **JDK 21 LTS** through Gradle toolchains with the foojay resolver, which provisions it automatically, so nothing is installed system-wide.
-- **Android SDK:** Google's command-line tools in `~/Android/Sdk` (no sudo), with `platform-tools`, `platforms;android-37` and the latest `build-tools`. Installing it means downloading from dl.google.com and accepting the Android SDK licenses, which needs **explicit user approval**.
-- **IDE:** Android Studio is optional and up to the user (for previews and debugging). The project builds from the CLI with `./gradlew`.
-- **Device testing:** the Pixel over adb (USB or wireless debugging). Ask the user for device-side information only as a last resort.
+**Decided:**
+- **JDK 21 LTS from `extra/jdk21-openjdk`.** The user installs it (it needs sudo). Gradle toolchains point at it, and **foojay auto-provisioning is not used**, since it would download a JDK from outside Arch.
+- **IDE:** Android Studio is optional and up to the user. The project builds from the CLI.
+- **Device testing:** the Pixel over adb. Ask the user for device-side information only as a last resort.
+
+**Open (see §7):**
+- **Android SDK.** No SDK package exists in Arch's official repos; archlinux.org search for `android-sdk` returns nothing. Google's SDK license doesn't allow redistribution, so Arch only has it in the AUR. The only non-AUR source is Google itself: `cmdline-tools` from dl.google.com, then `sdkmanager` for `platform-tools`, `platforms;android-37` and `build-tools`, installed into `~/Android/Sdk`. This requires accepting Google's SDK license.
+- **Gradle.** `extra/gradle` (9.7.1) exists. The standard practice is the Gradle wrapper, which downloads the distribution from services.gradle.org.
+- **Unavoidable downloads:** every Android build pulls AGP, AndroidX and Kotlin libraries from Google's Maven repository and Maven Central. Arch doesn't package these.
 
 ## 7. Open questions waiting on the user
 
-1. **Overlay permission:** can we use an accessibility overlay (§2.2) instead of "Display over other apps", which needs one permission fewer?
-2. **Page layout:** a grid? How many columns and rows, and are they configurable? Are modules always 1×1, or can some be larger (like widgets)? Proposed: a configurable grid of 1×1 cells, with a data model that allows spans later.
-3. **Fallback trigger** for Samsung and other devices where power long-press can't open a third-party assistant.
-4. **Build environment:** approve §6, including the SDK download and license acceptance.
-5. **Text search actions:** XGesture's result panel offers copy, web search, translate and more. Which are in v1?
+1. **OCR inference engine.** The user asked why Microsoft is involved, given the model must be 100% offline and local. The explanation given was that ONNX Runtime is only the offline engine that executes the model; it's hosted on Maven Central and makes no network calls. Waiting on: accept ONNX Runtime, or pick an alternative (§4).
+2. **Android SDK source.** It isn't in Arch's official repos (§6). Waiting on: OK to download it directly from Google (dl.google.com) and accept Google's SDK license?
+3. **Gradle.** Use the wrapper (standard), or Arch's `extra/gradle`? Proposed: the wrapper.
 
 ## 8. Decision log
 
@@ -124,6 +141,12 @@ All decisions are from 2026-10-08.
 - **Background:** blur by default, dim as an option.
 - **Language:** English only.
 - **Agent notes file:** named `AGENTS.md`.
+- **Overlay permission:** no `SYSTEM_ALERT_WINDOW`; use an accessibility overlay. The user's condition was that accessibility had to be enough, and this was verified in AOSP (§2.2).
+- **Page grid:** single-cell modules in a launcher-like grid; swipe direction configurable.
+- **Unsupported devices:** no fallback trigger in v1 (e.g. Samsung).
+- **Text search actions in v1:** Copy only.
+- **Build tools:** Arch official repos only, never the AUR.
+- **Gemini/Assistant:** losing them is accepted.
 
 ## 9. XGesture reference map
 
@@ -145,7 +168,7 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 ## 10. Status
 
 - **Done:** requirements gathered; XGesture reviewed; repository initialized; this file written.
-- **In progress:** waiting on §7.
+- **In progress:** waiting on §7. The user needs to install `jdk21-openjdk`.
 - **Not started:** everything in code.
 
 ## 11. Open technical questions
@@ -158,4 +181,5 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 
 - Battery saver turns off cross-window blur. The overlay must switch to dim live, not only on the next open.
 - On Android 13+, accessibility for sideloaded apps sits behind "restricted settings". Onboarding must walk the user through *App info → ⋮ → Allow restricted settings*.
-- The Digital assistant role replaces Gemini/Assistant. Users lose the "Hey Google" hotword unless another path exists. Say so in onboarding.
+- The Digital assistant role replaces Gemini/Assistant, so "Hey Google" stops working. This is accepted.
+- The system may remove `TYPE_ACCESSIBILITY_OVERLAY` windows after screen-off or lock (XGesture's `FloatBallOverlay.kt` comments on this). The overlay must handle being removed externally.
