@@ -4,8 +4,9 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-- **Current phase:** pre-scaffold. Requirements are agreed. Waiting on the user for the two open items in §7 (the OCR inference engine and the Android SDK source).
-- **Next action once the user answers §7:** the user installs the JDK (§6), then set up the SDK, scaffold the Gradle project (§5), then build the overlay + page/module framework (§2) before any v1 module (§3).
+- **Current phase:** scaffolding the Gradle project (§5). The toolchain is installed (§6).
+- **Next action:** finish the scaffold and get it compiling. Then build the overlay + page/module framework (§2) before any v1 module (§3).
+- **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mat+github@inboxmc.com>` (the machine's global git identity).
 - **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. No XGesture code is copied verbatim; where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
 
@@ -84,7 +85,15 @@ A separate module from 3.2. The flow:
 - **Runtime (proposed; the user questioned it, see §7):** an on-device inference engine is required to run any `.onnx` model.
   - The proposal is ONNX Runtime: an open-source (MIT) library published by Microsoft on Maven Central (`com.microsoft.onnxruntime:onnxruntime-android`). It runs entirely in-process, offline.
   - It's proposed because PaddlePaddle publishes PP-OCRv6 officially as ONNX, so the official files and hashes are used as-is, with no conversion.
-  - Only the arm64 `.so` files would be downloaded and verified by SHA-256.
+  - **Decided: ONNX Runtime** (user accepted 2026-10-08).
+  - **How the downloaded engine is loaded.** This follows XGesture's approach, verified against ORT 1.30's `OnnxRuntime.java`:
+    - On Android, `OnnxRuntime.init()` only calls `System.loadLibrary("onnxruntime4j_jni")`. It never loads `libonnxruntime.so` by name; the glue library pulls it in as a `DT_NEEDED` dependency.
+    - So the APK ships the ORT Java classes plus the small glue library, and packaging excludes `**/libonnxruntime.so`.
+    - Before first use, the downloaded `libonnxruntime.so` (arm64, taken from the official `onnxruntime-android` AAR on Maven Central and checked by SHA-256) is made read-only and loaded with `System.load(absolutePath)`.
+    - When the glue library loads afterwards, the dynamic linker finds an already-loaded library with that soname and reuses it.
+    - The glue library has no inference ability without the downloaded engine.
+    - **No NDK or own JNI is needed.** (The NDK and CMake were installed into `~/Android/Sdk` before this was understood; they're unused and can be removed.)
+    - The glue library and the engine **must come from the same ORT version**. Pin both in one place.
   - Pre- and post-processing (DBNet boxes, CTC decoding) is done in Kotlin, so OpenCV isn't needed.
   - Alternatives, each requiring converted, non-official model files:
     - Paddle Lite (Baidu, PaddleOCR's own mobile engine, `.nb` format)
@@ -113,21 +122,23 @@ A separate module from 3.2. The flow:
 - `adb` is at `/usr/bin/adb`, from `extra/android-tools`.
 - No device is attached.
 
-**Decided:**
-- **JDK 21 LTS from `extra/jdk21-openjdk`.** The user installs it (it needs sudo). Gradle toolchains point at it, and **foojay auto-provisioning is not used**, since it would download a JDK from outside Arch.
-- **IDE:** Android Studio is optional and up to the user. The project builds from the CLI.
-- **Device testing:** the Pixel over adb. Ask the user for device-side information only as a last resort.
-
-**Open (see §7):**
-- **Android SDK.** No SDK package exists in Arch's official repos; archlinux.org search for `android-sdk` returns nothing. Google's SDK license doesn't allow redistribution, so Arch only has it in the AUR. The only non-AUR source is Google itself: `cmdline-tools` from dl.google.com, then `sdkmanager` for `platform-tools`, `platforms;android-37` and `build-tools`, installed into `~/Android/Sdk`. This requires accepting Google's SDK license.
-- **Gradle.** `extra/gradle` (9.7.1) exists. The standard practice is the Gradle wrapper, which downloads the distribution from services.gradle.org.
-- **Unavoidable downloads:** every Android build pulls AGP, AndroidX and Kotlin libraries from Google's Maven repository and Maven Central. Arch doesn't package these.
+**Installed and decided (2026-10-08):**
+- **JDK 21 LTS** from `extra/jdk21-openjdk`, at `/usr/lib/jvm/java-21-openjdk`. The system default is still JDK 17. Gradle's daemon JVM is pinned to 21 via `gradle/gradle-daemon-jvm.properties`, and JDK auto-download is disabled (`org.gradle.java.installations.auto-download=false`), since the user allows only Arch-official tooling.
+- **Android SDK** directly from Google, never the AUR. It lives in `~/Android/Sdk` (`local.properties` → `sdk.dir`, gitignored). Installed:
+  - `cmdline-tools;latest` (23.0, SHA-1 verified against Google's `repository2-3.xml`)
+  - `platforms;android-37.0`
+  - `build-tools;37.0.0`
+  - `ndk;30.0.16248370` and `cmake;4.1.2`, which are unused (§4)
+  - The SDK licenses were accepted with the user's approval.
+- **Gradle:** the wrapper, pinned to **9.8.1** with `distributionSha256Sum`. It was generated from the official distribution, SHA-256 verified.
+- **Versions at scaffold time:** see `gradle/libs.versions.toml` (AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Compose BOM 2026.09.00).
+- **IDE:** Android Studio is optional and up to the user. The project builds from the CLI with `./gradlew`.
+- **Device testing:** the Pixel over adb (`/usr/bin/adb` from `extra/android-tools`). Ask the user for device-side information only as a last resort.
+- Every Android build pulls AGP, AndroidX and Kotlin libraries from Google's Maven repository and Maven Central. Arch doesn't package these, so this is unavoidable.
 
 ## 7. Open questions waiting on the user
 
-1. **OCR inference engine.** The user asked why Microsoft is involved, given the model must be 100% offline and local. The explanation given was that ONNX Runtime is only the offline engine that executes the model; it's hosted on Maven Central and makes no network calls. Waiting on: accept ONNX Runtime, or pick an alternative (§4).
-2. **Android SDK source.** It isn't in Arch's official repos (§6). Waiting on: OK to download it directly from Google (dl.google.com) and accept Google's SDK license?
-3. **Gradle.** Use the wrapper (standard), or Arch's `extra/gradle`? Proposed: the wrapper.
+None right now.
 
 ## 8. Decision log
 
@@ -145,7 +156,8 @@ All decisions are from 2026-10-08.
 - **Page grid:** single-cell modules in a launcher-like grid; swipe direction configurable.
 - **Unsupported devices:** no fallback trigger in v1 (e.g. Samsung).
 - **Text search actions in v1:** Copy only.
-- **Build tools:** Arch official repos only, never the AUR.
+- **Build tools:** Arch official repos only, never the AUR. The Android SDK comes directly from Google, the only non-AUR source, which the user approved. Gradle comes from the wrapper.
+- **OCR inference engine:** ONNX Runtime.
 - **Gemini/Assistant:** losing them is accepted.
 
 ## 9. XGesture reference map
@@ -174,7 +186,6 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 ## 11. Open technical questions
 
 - Is a `RecognitionService` stub required for Power++ to appear in the Digital assistant picker on Android 17? Verify against AOSP and on the device.
-- ONNX Runtime's Java API on Android loads native libraries with `System.loadLibrary`. How do we load downloaded libraries from app storage? Options: our own thin JNI over the ORT C API, or preloading. Needs investigation.
 - Is `takeScreenshot` latency and rate-limiting (about 1 call per 333 ms) good enough for XGesture-like capture?
 
 ## 12. Known risks and potential bugs
