@@ -190,6 +190,19 @@ A separate module from 3.2. The flow:
   - Capturing at activation is strictly ordered: the app still has focus and nothing of ours is on screen yet.
   - Proposed gating: capture only if the panel contains a module that uses the screenshot.
 
+### 3.5b Retake (user, 2026-10-08)
+- **Purpose split, as stated by the user:** the frozen activation capture is for apps that hide themselves on focus loss; **Retake** is for dynamic content (video, timers, anything that changed).
+  - Retake can't help self-hiding apps: our selection overlay holds focus, so they're already hidden.
+- **Smart screenshot:** a **Retake** button in the Max/Default row under the shape toolbar. It replaces the frozen image and keeps the current selection.
+  - A blocked (black) result shows the toast and keeps the old image.
+  - The replaced bitmap is left to the GC, not recycled, because a frame in flight may still reference it.
+- **OCR:** also gets Retake. Placement: the region-selection stage, next to Confirm/Reset.
+- **Implementation (`ScreenRecapture`):** Android 14+ only (`takeScreenshotOfWindow`); the button is hidden on 12–13, which have no per-window capture, and the only alternative would be a timing guess.
+  - Each window from `getWindows()` except accessibility overlays is captured and stacked bottom-up onto a black display-sized canvas, after converting hardware bitmaps to software.
+  - The rate limit is per window id, so the parallel per-window captures don't conflict.
+  - The platform Javadoc recommends `takeScreenshotOfWindow` for windows under an accessibility overlay.
+- **Verified limitation:** `AccessibilityWindowManager.isReportedWindowType` excludes `TYPE_WALLPAPER` (also non-touchable windows, input consumers, etc.). So a retake shows **black where the wallpaper was** (e.g. behind home-screen icons); app content is unaffected. The same code shows `TYPE_ACCESSIBILITY_OVERLAY` doesn't occlude windows below it in that list.
+
 ### 3.6 Smart screenshot selection shapes (user, 2026-10-08)
 - Default: a resizable rectangle in the center (like XGesture).
 - **Horizontal edge-to-edge strip:** always spans the full screen width. Its height is adjustable (sensible default) and it can be dragged up and down.

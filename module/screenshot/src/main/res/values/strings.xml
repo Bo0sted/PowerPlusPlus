@@ -6,6 +6,7 @@
     <string name="screenshot_shape_vertical">Full-height strip</string>
     <string name="screenshot_size_max">Max</string>
     <string name="screenshot_size_default">Default</string>
+    <string name="screenshot_retake">Retake</string>
     <string name="screenshot_copy">Copy</string>
     <string name="screenshot_save">Save</string>
     <string name="screenshot_share">Share</string>

@@ -68,7 +68,8 @@ private sealed interface Drag {
 /**
  * Step 1 of Smart screenshot: the frozen screenshot with a selection to move and resize. The shape
  * toolbar floats above the selection, the action toolbar below it; both hide while dragging.
- * Tapping outside the selection cancels.
+ * Tapping outside the selection cancels. Under the shape toolbar: Max, Default and — when
+ * [onRetake] is given — Retake, which replaces the frozen capture with a fresh one.
  *
  * @param onAction receives the selection in screenshot pixels.
  */
@@ -77,9 +78,12 @@ internal fun SelectScreen(
     image: ImageBitmap,
     onAction: (ScreenshotAction, Rect, SelectionShape) -> Unit,
     onCancel: () -> Unit,
+    onRetake: (() -> Unit)?,
+    retaking: Boolean,
 ) {
     val density = LocalDensity.current
-    val geometry = remember(image) {
+    // Keyed on the size, not the image, so a retake keeps the current selection.
+    val geometry = remember(image.width, image.height) {
         SelectionGeometry(Size(image.width.toFloat(), image.height.toFloat()), minSize = with(density) { 48.dp.toPx() })
     }
     var shape by remember { mutableStateOf(SelectionShape.Rectangle) }
@@ -166,6 +170,9 @@ internal fun SelectScreen(
             FloatingToolbar(anchor = onScreen, area = area, above = true, stackIndex = 1) {
                 TextButton(onClick = { selection = geometry.max(shape, selection) }) { Text(stringResource(R.string.screenshot_size_max)) }
                 TextButton(onClick = { selection = geometry.default(shape) }) { Text(stringResource(R.string.screenshot_size_default)) }
+                if (onRetake != null) {
+                    TextButton(onClick = onRetake, enabled = !retaking) { Text(stringResource(R.string.screenshot_retake)) }
+                }
             }
             FloatingToolbar(anchor = onScreen, area = area, above = false) {
                 ActionButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onAction(ScreenshotAction.Copy, selection, shape) }

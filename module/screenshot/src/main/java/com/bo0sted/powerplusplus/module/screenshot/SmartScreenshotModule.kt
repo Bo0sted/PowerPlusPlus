@@ -7,6 +7,9 @@ import android.os.Build
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
 import com.bo0sted.powerplusplus.module.ActionModule
@@ -49,13 +52,35 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
         showSelection(host, image)
     }
 
-    private fun showSelection(host: ModuleHost, image: Bitmap) {
+    private fun showSelection(host: ModuleHost, initial: Bitmap) {
         val service = host.service
         lateinit var window: OverlayWindow
         var busy = false
+        // Replaced by Retake; the frozen activation capture is the first value.
+        var image by mutableStateOf(initial)
+        var retaking by mutableStateOf(false)
         fun close() {
             window.dismiss()
             image.recycle()
+        }
+        fun retake() {
+            if (retaking || !ScreenRecapture.isSupported) return
+            retaking = true
+            host.scope.launch {
+                val fresh = ScreenRecapture.capture(service, image.width, image.height)
+                when {
+                    fresh == null -> service.toast(R.string.screenshot_capture_failed)
+                    withContext(Dispatchers.Default) { ScreenshotImage.looksBlocked(fresh) } -> {
+                        fresh.recycle()
+                        service.toast(R.string.screenshot_blocked)
+                    }
+                    !window.isShowing -> fresh.recycle()
+                    // The replaced image may still be referenced by a frame being rendered, so it is
+                    // left to the garbage collector rather than recycled here.
+                    else -> image = fresh
+                }
+                retaking = false
+            }
         }
         fun finish(action: ScreenshotAction, selection: Rect, shape: SelectionShape) {
             if (busy) return
@@ -98,7 +123,13 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
         window = OverlayWindow(service, onDismissRequest = ::close)
         window.show {
             PowerTheme(darkTheme = true) {
-                SelectScreen(image = image.asImageBitmap(), onAction = ::finish, onCancel = ::close)
+                SelectScreen(
+                    image = image.asImageBitmap(),
+                    onAction = ::finish,
+                    onCancel = ::close,
+                    onRetake = if (ScreenRecapture.isSupported) ::retake else null,
+                    retaking = retaking,
+                )
             }
         }
     }
