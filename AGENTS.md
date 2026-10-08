@@ -25,7 +25,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   - The user tests on a Pixel 9 Pro XL (Android 17) over **wireless adb**. The address changes per session; ask the user for the `adb connect` line.
   - **Don't send input (taps or swipes) to the user's device.** Read state only (logcat, dumpsys, screencap) and ask the user to interact.
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
-- **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs). The remote is recorded in §10 once it's set.
+- **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs). The remote and how to push are in §10.
 - **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. Where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
 
 ## 1. What the app is
@@ -438,7 +438,8 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 **Not done:**
 - **OCR text search** (§3.3): the pipeline and module. **This is the next task.**
 
-**Remote:** not set as of the end of the session; see the hand-off note below once it is.
+**Remote:** `origin` = `git@github.com:Bo0sted/PowerPlusPlus.git` (SSH, private repo `github.com/Bo0sted/PowerPlusPlus`). `main` tracks `origin/main`; first pushed 2026-10-08.
+- The user's SSH key (`~/.ssh/github`) has a passphrase, so the agent can't push from its own shell (batch mode). Run `git push` in the user's terminal panel, where the user enters the passphrase themselves. Push only when the user says so.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
 
