@@ -172,7 +172,10 @@ Nothing else changes.
 
 ## 7. Open questions waiting on the user
 
-None right now.
+1. **Lock screen:** should the panel be usable from the lock screen? Some modules (screenshots, reading screen text) raise privacy questions there.
+   - Current behavior: nothing special is done; `supportsLaunchVoiceAssistFromKeyguard` isn't declared.
+   - Asked 2026-10-08; no answer yet.
+2. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
 
 ## 8. Decision log
 
@@ -225,7 +228,7 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 - **On-device testing (Pixel 9 Pro XL, Android 17), 2026-10-08:**
   - Confirmed working by the user: install and launch, the setup checklist, the accessibility service, Power++ as Digital assistant, power long-press → panel, Back closes, page swiping, the editor adding a module and a second page, Dimmed black, the Power menu module.
   - Blur was broken, then fixed (see §11); the user confirmed it works.
-  - Not yet explicitly tested: move/remove/disable in the editor, the grid resize reflow, horizontal swipe, the empty-state panel.
+  - Later the same day the user confirmed these also work: move/remove/disable in the editor, the grid resize reflow, horizontal swipe, the empty-state panel, and dismissal on screen off.
 - Accessibility text search, Smart screenshot, OCR text search, and the OCR model/engine manager.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
