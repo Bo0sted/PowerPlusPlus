@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.bo0sted.powerplusplus.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import com.bo0sted.powerplusplus.data.PanelConfig
 import com.bo0sted.powerplusplus.data.PanelPage
 import com.bo0sted.powerplusplus.data.SwipeAxis
@@ -104,6 +105,7 @@ private fun PanelPageGrid(
                             active = false,
                             onClick = { onAction(module) },
                             modifier = cellModifier,
+                            onBackdrop = true,
                         )
                         is ToggleModule -> {
                             val on by remember(module) { module.isOn(host) }.collectAsState(initial = false)
@@ -113,6 +115,7 @@ private fun PanelPageGrid(
                                 active = on,
                                 onClick = { onToggle(module, !on) },
                                 modifier = cellModifier,
+                                onBackdrop = true,
                             )
                         }
                         // Empty cell, or a module that is no longer installed: leave the space.
@@ -133,7 +136,7 @@ private fun EmptyPanel(onClose: () -> Unit) {
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
             Text(
                 stringResource(R.string.panel_empty),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.onBackdrop(),
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
             )
@@ -148,7 +151,10 @@ private fun PageIndicator(state: PagerState, axis: SwipeAxis, modifier: Modifier
     val dots: @Composable () -> Unit = {
         repeat(state.pageCount) { index ->
             val color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (index == state.currentPage) 0.9f else 0.3f)
-            Box(Modifier.padding(4.dp).size(8.dp).clip(CircleShape).background(color))
+            Box(
+                Modifier.padding(4.dp).size(8.dp).clip(CircleShape).background(color)
+                    .border(1.dp, BackdropOutline, CircleShape),
+            )
         }
     }
     if (axis == SwipeAxis.Vertical) {

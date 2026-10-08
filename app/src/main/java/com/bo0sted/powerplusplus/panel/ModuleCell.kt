@@ -26,6 +26,7 @@ fun ModuleCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
+    onBackdrop: Boolean = false,
 ) {
     Column(
         modifier = modifier,
@@ -46,7 +47,7 @@ fun ModuleCell(
         }
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelMedium.let { if (onBackdrop) it.onBackdrop() else it },
             color = if (dimmed) colors.onSurface.copy(alpha = 0.38f) else colors.onSurface,
             textAlign = TextAlign.Center,
             maxLines = 2,

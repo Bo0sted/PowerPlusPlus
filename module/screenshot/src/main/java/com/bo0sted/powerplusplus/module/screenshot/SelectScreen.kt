@@ -154,10 +154,10 @@ internal fun SelectScreen(
                 viewSize.height - safe.getBottom(density) - margin,
             )
             FloatingToolbar(anchor = onScreen, area = area, above = true) {
-                ShapeButton(SelectionShape.Rectangle, Icons.Rounded.CropSquare, R.string.screenshot_shape_rectangle, shape) { shape = it; selection = geometry.reshape(selection, it) }
-                ShapeButton(SelectionShape.Circle, Icons.Outlined.Circle, R.string.screenshot_shape_circle, shape) { shape = it; selection = geometry.reshape(selection, it) }
-                ShapeButton(SelectionShape.HorizontalStrip, Icons.Rounded.Crop169, R.string.screenshot_shape_horizontal, shape) { shape = it; selection = geometry.reshape(selection, it) }
-                ShapeButton(SelectionShape.VerticalStrip, Icons.Rounded.CropPortrait, R.string.screenshot_shape_vertical, shape) { shape = it; selection = geometry.reshape(selection, it) }
+                ShapeButton(SelectionShape.Rectangle, Icons.Rounded.CropSquare, R.string.screenshot_shape_rectangle, shape) { shape = it; selection = geometry.default(it) }
+                ShapeButton(SelectionShape.Circle, Icons.Outlined.Circle, R.string.screenshot_shape_circle, shape) { shape = it; selection = geometry.default(it) }
+                ShapeButton(SelectionShape.HorizontalStrip, Icons.Rounded.Crop169, R.string.screenshot_shape_horizontal, shape) { shape = it; selection = geometry.default(it) }
+                ShapeButton(SelectionShape.VerticalStrip, Icons.Rounded.CropPortrait, R.string.screenshot_shape_vertical, shape) { shape = it; selection = geometry.default(it) }
             }
             FloatingToolbar(anchor = onScreen, area = area, above = false) {
                 ActionButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onAction(ScreenshotAction.Copy, selection, shape) }

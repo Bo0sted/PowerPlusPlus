@@ -19,19 +19,9 @@ class SelectionGeometryTest {
         val moved = geometry.move(horizontal, Offset(300f, 50f), SelectionShape.HorizontalStrip)
         assertEquals(horizontal.translate(0f, 50f), moved)
 
-        val vertical = geometry.reshape(Rect(100f, 500f, 400f, 900f), SelectionShape.VerticalStrip)
-        assertEquals(Rect(100f, 0f, 400f, 2000f), vertical)
-    }
-
-    @Test
-    fun switchingBetweenStripsUsesTheDefaultThicknessInsteadOfTheFullSpan() {
-        val horizontal = geometry.default(SelectionShape.HorizontalStrip)
-        val vertical = geometry.reshape(horizontal, SelectionShape.VerticalStrip)
-        assertEquals(geometry.default(SelectionShape.VerticalStrip).width, vertical.width)
-        assertEquals(horizontal.center.x, vertical.center.x)
-
-        val backToHorizontal = geometry.reshape(vertical, SelectionShape.HorizontalStrip)
-        assertEquals(geometry.default(SelectionShape.HorizontalStrip).height, backToHorizontal.height)
+        val vertical = geometry.default(SelectionShape.VerticalStrip)
+        assertEquals(0f, vertical.top)
+        assertEquals(2000f, vertical.bottom)
     }
 
     @Test
@@ -55,11 +45,5 @@ class SelectionGeometryTest {
         val rect = Rect(100f, 100f, 300f, 300f)
         assertEquals(Rect(0f, 0f, 200f, 200f), geometry.move(rect, Offset(-500f, -500f), SelectionShape.Rectangle))
         assertEquals(Rect(800f, 1800f, 1000f, 2000f), geometry.move(rect, Offset(5000f, 5000f), SelectionShape.Rectangle))
-    }
-
-    @Test
-    fun reshapingToCircleCentersASquareOnTheSelection() {
-        val circle = geometry.reshape(Rect(100f, 100f, 500f, 300f), SelectionShape.Circle)
-        assertEquals(Rect(200f, 100f, 400f, 300f), circle)
     }
 }

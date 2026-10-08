@@ -35,25 +35,6 @@ class SelectionGeometry(private val bounds: Size, private val minSize: Float) {
         SelectionShape.VerticalStrip -> centered(bounds.width * 0.4f, bounds.height)
     }
 
-    /** Converts [rect] to [shape], keeping as much of the current position and size as the shape allows. */
-    fun reshape(rect: Rect, shape: SelectionShape): Rect = when (shape) {
-        SelectionShape.Rectangle -> clampSize(rect)
-        SelectionShape.Circle -> {
-            val side = max(minSize, min(rect.width, rect.height)).coerceAtMost(min(bounds.width, bounds.height))
-            placeInside(Rect(Offset(rect.center.x - side / 2, rect.center.y - side / 2), Size(side, side)))
-        }
-        // A strip keeps the current thickness, unless that spans the whole image (coming from the
-        // other strip), which would make it cover everything; then it takes its default thickness.
-        SelectionShape.HorizontalStrip -> {
-            val height = if (rect.height >= bounds.height) default(shape).height else rect.height
-            clampSize(Rect(0f, rect.center.y - height / 2, bounds.width, rect.center.y + height / 2))
-        }
-        SelectionShape.VerticalStrip -> {
-            val width = if (rect.width >= bounds.width) default(shape).width else rect.width
-            clampSize(Rect(rect.center.x - width / 2, 0f, rect.center.x + width / 2, bounds.height))
-        }
-    }
-
     fun handles(shape: SelectionShape): List<Handle> = when (shape) {
         SelectionShape.Rectangle, SelectionShape.Circle ->
             listOf(Handle.TopLeft, Handle.TopRight, Handle.BottomLeft, Handle.BottomRight)
@@ -119,13 +100,6 @@ class SelectionGeometry(private val bounds: Size, private val minSize: Float) {
 
     private fun centered(width: Float, height: Float): Rect =
         Rect(Offset((bounds.width - width) / 2, (bounds.height - height) / 2), Size(width, height))
-
-    /** Enforces the minimum size and the image bounds without moving the center more than needed. */
-    private fun clampSize(rect: Rect): Rect {
-        val width = rect.width.coerceIn(min(minSize, bounds.width), bounds.width)
-        val height = rect.height.coerceIn(min(minSize, bounds.height), bounds.height)
-        return placeInside(Rect(Offset(rect.center.x - width / 2, rect.center.y - height / 2), Size(width, height)))
-    }
 
     /** Shifts [rect] so it lies inside the image. Assumes it isn't larger than the image. */
     private fun placeInside(rect: Rect): Rect {

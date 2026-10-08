@@ -103,7 +103,7 @@ A separate module from 3.2. The flow:
   - defaults: rectangle 60 % × 35 % of the screen, circle 60 % of the short side, horizontal strip 20 % of the height, vertical strip 40 % of the width
   - 48 dp minimum
   - strips move only across their axis and have edge handles only; the circle stays square, anchored at the opposite corner
-  - `reshape` converts between shapes, keeping the position. A strip keeps the current thickness unless it spans the whole image (coming from the other strip), in which case it uses the default thickness. Fixed after the user reported the vertical strip opening at full width.
+  - **Switching shape always resets to that shape's default** (the user's rule, 2026-10-08). Carrying the previous size over maxed out an edge when switching to or from a strip.
 - **Crop:** the circle uses an antialiased oval clip on a transparent ARGB bitmap (transparent corners, decided by the user).
 - **`ScreenshotOutput`:**
   - **Copy/Share** write a PNG to `cacheDir/screenshots/`, served by the module's own FileProvider (`${applicationId}.screenshots`), and keep only the 5 newest files.
@@ -340,6 +340,7 @@ Re-verify only if the target platform changes.
 - Blur behind needs `FLAG_BLUR_BEHIND` plus `blurBehindRadius`.
 - `addCrossWindowBlurEnabledListener` fires immediately with the current state, then on every change.
 - `BlurController` disables blur when: it isn't supported, `disable_window_blurs` is set, battery saver is on, media tunneling is active, or thermal status is ≥ CRITICAL.
+- **Legibility over the backdrop:** the blurred backdrop can't be measured (the system composites it after we draw), so panel text uses a soft dark shadow (`TextStyle.onBackdrop()`), page dots have a dark outline, and the blur dim is 0.2. The user confirmed labels are readable over a white banking app.
 - **Blur-behind must be paired with a non-zero dim** (`FLAG_DIM_BEHIND`, dimAmount 0.1; 0.4 when blur is unavailable), as in the AOSP window-blurs guide (source.android.com/docs/core/display/window-blurs).
   - What happened (found on-device 2026-10-08, Pixel 9 Pro XL, Android 17): with dimAmount 0, the window's dim layer has alpha 0 and only a blur radius. The display hardware sometimes composited it (`DEVICE` in `dumpsys SurfaceFlinger`), and the hardware can't blur.
   - Symptoms: no blur on screen, yet blur visible in `screencap` (which is always GPU-composited), and blur appearing once anything forced recomposition (e.g. swiping pages).
