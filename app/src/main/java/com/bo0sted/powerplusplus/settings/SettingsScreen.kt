@@ -28,6 +28,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val config by viewModel.config.collectAsStateWithLifecycle()
     val accessibilityConnected by viewModel.accessibilityConnected.collectAsStateWithLifecycle()
     val isAssistant by viewModel.isAssistant.collectAsStateWithLifecycle()
+    val ocrStates by viewModel.ocrStates.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshAssistantRole() }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -44,6 +45,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             config?.let { current ->
                 item { LayoutSection(current, viewModel.registry, viewModel::edit) }
                 item { AppearanceSection(current, viewModel::edit) }
+                item { OcrSection(ocrStates, viewModel::installOcr, viewModel::removeOcr) }
             }
         }
     }

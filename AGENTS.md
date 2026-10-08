@@ -11,7 +11,8 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   3. ~~Smart screenshot step 1 + activation capture~~: the user confirmed it works on-device. The banking app is captured with its real content, and Copy and Save work.
   4. Smart screenshot step-2 editor: built.
      - The user found: missing top-bar buttons, stroke lag, and no editable text. All fixed 2026-10-08, **and the user confirmed everything works**, including Max/Default.
-  5. Then OCR (§3.3, §4).
+  5. OCR engine and model manager (§4): built; **awaiting the on-device test**, including the logged recognition class count.
+  6. Then the OCR pipeline and OCR text search module (§3.3).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
 - **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. No XGesture code is copied verbatim; where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
@@ -212,33 +213,48 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
 
 ## 4. OCR engines and models
 
-- **Nothing is bundled.** Both the inference runtime and every model are downloaded, kept on disk, and removable in the app.
-- **First model:** PP-OCRv6 Medium (detection ONNX + recognition ONNX + `inference.yml` dictionary, about 139 MB).
-  - **Primary source:** `huggingface.co/PaddlePaddle`, the official PaddlePaddle organization. URLs should be pinned to a commit, not `main`. Current XGesture URLs and hashes (useful as a starting point and for cross-checking) are in XGesture's `core/ocr/src/main/assets/ocr_models.json`, entry `ppocrv6-medium`.
-  - **Mirror:** ModelScope (also official PaddlePaddle). It's unconfirmed whether its files are byte-identical to Hugging Face's; this must be checked.
-- **Adding sources:** the catalog lets a model list several mirror URLs, so new sites can be added later. The user wants this.
-- **Runtime (proposed; the user questioned it, see §7):** an on-device inference engine is required to run any `.onnx` model.
-  - The proposal is ONNX Runtime: an open-source (MIT) library published by Microsoft on Maven Central (`com.microsoft.onnxruntime:onnxruntime-android`). It runs entirely in-process, offline.
-  - It's proposed because PaddlePaddle publishes PP-OCRv6 officially as ONNX, so the official files and hashes are used as-is, with no conversion.
-  - **Decided: ONNX Runtime** (user accepted 2026-10-08).
-  - **How the downloaded engine is loaded.** This follows XGesture's approach, verified against ORT 1.30's `OnnxRuntime.java`:
-    - On Android, `OnnxRuntime.init()` only calls `System.loadLibrary("onnxruntime4j_jni")`. It never loads `libonnxruntime.so` by name; the glue library pulls it in as a `DT_NEEDED` dependency.
-    - So the APK ships the ORT Java classes plus the small glue library, and packaging excludes `**/libonnxruntime.so`.
-    - Before first use, the downloaded `libonnxruntime.so` (arm64, taken from the official `onnxruntime-android` AAR on Maven Central and checked by SHA-256) is made read-only and loaded with `System.load(absolutePath)`.
-    - When the glue library loads afterwards, the dynamic linker finds an already-loaded library with that soname and reuses it.
-    - The glue library has no inference ability without the downloaded engine.
-    - **No NDK or own JNI is needed.**
-    - The glue library and the engine **must come from the same ORT version**. Pin both in one place.
-  - Pre- and post-processing (DBNet boxes, CTC decoding) is done in Kotlin, so OpenCV isn't needed.
-  - Alternatives, each requiring converted, non-official model files:
-    - Paddle Lite (Baidu, PaddleOCR's own mobile engine, `.nb` format)
-    - NCNN (Tencent)
-    - MNN (Alibaba)
-    - LiteRT (Google)
-- **Checking downloads (two layers).** The user doesn't know the model file formats and wants every download checked.
-  1. **Hash pinning:** every file in the catalog has a fixed SHA-256 and size; a download that doesn't match is discarded. This is what XGesture does (per-file SHA-256 plus a minimum size, then a `manifest.json` written on install). It means a file can only be a known-good artifact, whichever mirror served it.
-  2. **Load check:** after download, an ONNX Runtime session is opened and the input/output signature is checked against what the pipeline expects. The recognition output size must match the dictionary. The model is marked installed only if this passes.
-- **Android 17 note:** with `targetSdk >= 37`, `System.load()` rejects writable files. Make downloaded `.so` files read-only before loading.
+**Implemented 2026-10-08** as `:core:ocr` plus the settings section "OCR engine and models" (`app/settings/OcrSection.kt`). Awaiting the user's on-device test. The OCR *pipeline* and module aren't built yet.
+
+- **Nothing is bundled.** The engine and models are downloaded on demand, kept in `filesDir/ocr/<componentId>/`, and removable (with confirmation).
+- **`OcrCatalog`** pins every file with size and SHA-256 and lists URLs in order; any byte-identical mirror is acceptable. All values were verified 2026-10-08:
+  - **Engine:** ONNX Runtime **1.30.0** AAR from Maven Central, 53,040,218 B, SHA-256 `e7fb945e…73f1`.
+    - Its SHA-1 `656d9413…` equals Maven Central's published `.sha1`.
+    - Only `jni/<first supported ABI>/libonnxruntime.so` is extracted; then the AAR is deleted. arm64 lib: 32,990,480 B, SHA-256 `df5d25c7…`.
+  - **PP-OCRv6 Medium** (Apache-2.0, official `PaddlePaddle` org):
+
+    | File | Hugging Face commit | Size | SHA-256 |
+    |---|---|---|---|
+    | detection (`det.onnx`) | `61323801…` | 62,032,837 B | `eb13b44b…` |
+    | recognition (`rec.onnx`) | `50c7eaca…` | 76,554,979 B | `9c09abf0…` |
+    | recognition `inference.yml` (`rec.yml`, the dictionary) | `50c7eaca…` | 150,580 B | `991b700f…` |
+
+    - **ModelScope** (`PaddlePaddle/…`, revisions `8cb026ec…` for detection and `4b0e4965…` for recognition) serves **byte-identical** files (same SHA-256 per its API) and is the mirror.
+    - The same hashes appear in XGesture's catalog: an independent cross-check.
+  - All three hosts support HTTP Range (206); Hugging Face and ModelScope redirect to their CDNs.
+- **`VerifiedDownloader`:**
+  - writes to `<name>.part` and resumes with a Range request (restarting if the host replies 200)
+  - tries each URL in order
+  - accepts a file only when its size and SHA-256 match, deletes mismatched bytes, then renames it into place
+- **`OcrComponents`** (@Singleton):
+  - state per component: NotInstalled / Downloading (throttled to 0.1 %) / Verifying / Installed / Failed
+  - installing a model installs the engine first if it's missing
+  - cancellation propagates (Remove during a download cancels it)
+  - **installed = a marker file written last**, after verification **and** a load check
+- **Load check (`OrtEngine`):**
+  - **Engine:** `System.load(path)` (made read-only first, as Android 17 requires), then `OrtEnvironment.getEnvironment()`.
+  - **Models:** detection input `[n,3,h,w]` → output `[n,1,h,w]`; recognition input `[n,3,48,w]` → output `[n,t,C]` with `C` = dictionary + 1 or + 2. The actual `C` is logged (tag `PowerPP.Ocr`). Expected 18,710 = 18,708 characters + CTC blank + space (PaddleOCR `use_space_char`); **to be confirmed on-device**.
+- **How the downloaded engine loads** (verified in sources):
+  - On Android, ORT 1.30's `OnnxRuntime.init()` only `loadLibrary`s the JNI glue `libonnxruntime4j_jni.so`.
+  - `readelf`: the glue has `NEEDED libonnxruntime.so`; the engine's `SONAME` is `libonnxruntime.so`, and it depends only on libc, libm, libdl, liblog and libandroid.
+  - bionic `find_library_internal` first reuses an already-loaded library by SONAME.
+  - So: `System.load(engine)` → then any `ai.onnxruntime` use. The app excludes `**/libonnxruntime.so` from packaging; the APK ships only the glue (111 KB arm64).
+  - A loaded engine can't be unloaded; removal takes effect after a restart.
+- **The version is pinned once:** `libs.versions.toml` `onnxruntime` → `BuildConfig.ORT_VERSION`. `OcrCatalogTest` fails if the catalog's engine version or URL disagrees.
+- **Pipeline parameters** (from the pinned configs, for the pipeline still to build):
+  - Detection: BGR; normalise with mean `[0.485, 0.456, 0.406]`, std `[0.229, 0.224, 0.225]` after /255; DB post-processing thresh 0.2, box_thresh 0.45, unclip 1.4, max 3000 candidates; TensorRT optimum shape 736.
+  - Recognition: BGR; resize to height 48 (reference width 320); CTC decode.
+  - `RecognitionDictionary` parses the dictionary; it's unit-tested against the quoting rules (PyYAML reads 18,708 plain or single-quoted entries).
+- **Permission:** the `INTERNET` permission, declared in `:core:ocr`'s manifest, is used **only** for these user-initiated downloads.
 
 ## 5. Architecture
 

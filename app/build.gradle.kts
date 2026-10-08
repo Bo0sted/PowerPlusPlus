@@ -13,6 +13,14 @@ android {
         versionName = "0.1.0"
     }
 
+    packaging {
+        jniLibs {
+            // The ONNX Runtime engine is downloaded at runtime (core:ocr OrtEngine); only its Java
+            // classes and the small JNI glue (libonnxruntime4j_jni.so) ship in the APK.
+            excludes += "**/libonnxruntime.so"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -27,6 +35,7 @@ dependencies {
     implementation(project(":core:module"))
     implementation(project(":core:data"))
     implementation(project(":core:overlay"))
+    implementation(project(":core:ocr"))
 
     // Panel modules. Adding one here is all it takes to make it available in the editor.
     implementation(project(":module:powermenu"))

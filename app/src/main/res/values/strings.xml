@@ -30,6 +30,22 @@
     <string name="layout_move">Move</string>
     <string name="layout_remove">Remove</string>
 
+    <string name="ocr_title">OCR engine and models</string>
+    <string name="ocr_body">Text recognition runs entirely on this device. Nothing is bundled with Power++: each part is downloaded from its official publisher, checked against a pinned SHA-256, and test-loaded before it\'s used.</string>
+    <string name="ocr_engine_name">OCR engine (ONNX Runtime %1$s)</string>
+    <string name="ocr_engine_source">From Microsoft, via Maven Central</string>
+    <string name="ocr_model_source">From PaddlePaddle, via Hugging Face (ModelScope as mirror)</string>
+    <string name="ocr_status_not_installed">Not downloaded · %1$s</string>
+    <string name="ocr_status_downloading">Downloading %1$d %% · %2$s of %3$s</string>
+    <string name="ocr_status_verifying">Verifying…</string>
+    <string name="ocr_status_installed">Installed · %1$s</string>
+    <string name="ocr_status_failed">Failed: %1$s</string>
+    <string name="ocr_download">Download</string>
+    <string name="ocr_retry">Retry</string>
+    <string name="ocr_remove">Remove</string>
+    <string name="ocr_remove_title">Remove %1$s?</string>
+    <string name="ocr_remove_body">It can be downloaded again at any time.</string>
+
     <string name="appearance_title">Appearance</string>
     <string name="appearance_columns">Columns</string>
     <string name="appearance_rows">Rows</string>

@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.bo0sted.powerplusplus.data.PanelConfig
 import com.bo0sted.powerplusplus.data.PanelRepository
 import com.bo0sted.powerplusplus.module.ModuleRegistry
+import com.bo0sted.powerplusplus.ocr.ComponentState
+import com.bo0sted.powerplusplus.ocr.OcrComponent
+import com.bo0sted.powerplusplus.ocr.OcrComponents
 import com.bo0sted.powerplusplus.panel.PanelController
 import com.bo0sted.powerplusplus.service.ModuleHostProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,7 +30,15 @@ class SettingsViewModel @Inject constructor(
     private val panel: PanelController,
     hostProvider: ModuleHostProvider,
     val registry: ModuleRegistry,
+    private val ocr: OcrComponents,
 ) : ViewModel() {
+
+    val ocrStates: StateFlow<Map<String, ComponentState>> = ocr.state
+
+    fun installOcr(component: OcrComponent) = ocr.install(component)
+
+    fun removeOcr(component: OcrComponent) = ocr.remove(component)
+
 
     /** `null` until the stored layout has been read. */
     val config: StateFlow<PanelConfig?> =
