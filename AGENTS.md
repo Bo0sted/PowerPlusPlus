@@ -222,7 +222,10 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 - Lint is clean across all modules.
 
 **Not yet done:**
-- **No on-device testing.** Every behavior above is compile-verified only.
+- **On-device testing (Pixel 9 Pro XL, Android 17), 2026-10-08:**
+  - Confirmed working by the user: install and launch, the setup checklist, the accessibility service, Power++ as Digital assistant, power long-press → panel, Back closes, page swiping, the editor adding a module and a second page, Dimmed black, the Power menu module.
+  - Blur was broken, then fixed (see §11); the user confirmed it works.
+  - Not yet explicitly tested: move/remove/disable in the editor, the grid resize reflow, horizontal swipe, the empty-state panel.
 - Accessibility text search, Smart screenshot, OCR text search, and the OCR model/engine manager.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
@@ -247,6 +250,11 @@ Re-verify only if the target platform changes.
 - Windows added via `WindowManager.addView` get hardware acceleration **only** with an explicit `FLAG_HARDWARE_ACCELERATED` (`ViewRootImpl.enableHardwareAcceleration`).
 - Blur behind needs `FLAG_BLUR_BEHIND` plus `blurBehindRadius`.
 - `addCrossWindowBlurEnabledListener` fires immediately with the current state, then on every change.
+- `BlurController` disables blur when: it isn't supported, `disable_window_blurs` is set, battery saver is on, media tunneling is active, or thermal status is ≥ CRITICAL.
+- **Blur-behind must be paired with a non-zero dim** (`FLAG_DIM_BEHIND`, dimAmount 0.1; 0.4 when blur is unavailable), as in the AOSP window-blurs guide (source.android.com/docs/core/display/window-blurs).
+  - What happened (found on-device 2026-10-08, Pixel 9 Pro XL, Android 17): with dimAmount 0, the window's dim layer has alpha 0 and only a blur radius. The display hardware sometimes composited it (`DEVICE` in `dumpsys SurfaceFlinger`), and the hardware can't blur.
+  - Symptoms: no blur on screen, yet blur visible in `screencap` (which is always GPU-composited), and blur appearing once anything forced recomposition (e.g. swiping pages).
+  - Fixed in `OverlayBackdrop.Blur`.
 
 **Back:**
 - With callbacks enabled (targetSdk 36+ on Android 16+, or the manifest `enableOnBackInvokedCallback`), `ViewRootImpl` routes Back to `OnBackInvokedCallback` before views; views never get `KEYCODE_BACK`.

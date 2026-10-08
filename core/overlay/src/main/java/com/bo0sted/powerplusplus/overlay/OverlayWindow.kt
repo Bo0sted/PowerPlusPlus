@@ -115,10 +115,9 @@ class OverlayWindow(
     }
 
     private fun WindowManager.LayoutParams.blur(blur: OverlayBackdrop.Blur) {
-        flags = (flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND) and
-            WindowManager.LayoutParams.FLAG_DIM_BEHIND.inv()
+        flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND or WindowManager.LayoutParams.FLAG_DIM_BEHIND
         blurBehindRadius = blur.radiusPx
-        dimAmount = 0f
+        dimAmount = blur.dimAmount
     }
 
     private fun WindowManager.LayoutParams.dim(dim: OverlayBackdrop.Dim) {
