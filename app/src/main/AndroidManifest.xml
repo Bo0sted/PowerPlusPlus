@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Added by the ONNX Runtime AAR for its telemetry; not needed. -->
+    <uses-permission
+        android:name="android.permission.ACCESS_NETWORK_STATE"
+        tools:node="remove" />
+
     <application
         android:name=".PowerApp"
         android:enableOnBackInvokedCallback="true"
@@ -56,6 +61,15 @@
             android:name=".assistant.PowerSessionService"
             android:exported="true"
             android:permission="android.permission.BIND_VOICE_INTERACTION" />
+
+        <!--
+            ONNX Runtime's 1DS telemetry bootstrap, auto-started by the AAR at every launch. Removed:
+            Power++ sends nothing anywhere. See core:ocr OrtEngine.
+        -->
+        <provider
+            android:name="ai.onnxruntime.TelemetryInitializer"
+            android:authorities="${applicationId}.onnxruntime_telemetry_initializer"
+            tools:node="remove" />
 
         <!--
             Required by name in the voice-interaction metadata, but unused since Android 12. It has no

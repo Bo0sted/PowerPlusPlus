@@ -11,7 +11,11 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   3. ~~Smart screenshot step 1 + activation capture~~: the user confirmed it works on-device. The banking app is captured with its real content, and Copy and Save work.
   4. Smart screenshot step-2 editor: built.
      - The user found: missing top-bar buttons, stroke lag, and no editable text. All fixed 2026-10-08, **and the user confirmed everything works**, including Max/Default.
-  5. OCR engine and model manager (§4): built; **awaiting the on-device test**, including the logged recognition class count.
+  5. OCR engine and model manager (§4): **verified on-device**.
+     - The user downloaded both components; the engine loaded via `System.load` and the glue linked (`nativeloader … ok`).
+     - Load check: **18,708 characters / 18,710 recognition classes** (blank + space confirmed).
+     - The AAR was deleted, and the engine is read-only.
+     - Files were migrated to `no_backup/ocr`, and telemetry is off.
   6. Then the OCR pipeline and OCR text search module (§3.3).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
@@ -258,7 +262,15 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
   - Detection: BGR; normalise with mean `[0.485, 0.456, 0.406]`, std `[0.229, 0.224, 0.225]` after /255; DB post-processing thresh 0.2, box_thresh 0.45, unclip 1.4, max 3000 candidates; TensorRT optimum shape 736.
   - Recognition: BGR; resize to height 48 (reference width 320); CTC decode.
   - `RecognitionDictionary` parses the dictionary; it's unit-tested against the quoting rules (PyYAML reads 18,708 plain or single-quoted entries).
-- **Permission:** the `INTERNET` permission, declared in `:core:ocr`'s manifest, is used **only** for these user-initiated downloads.
+- **Permission:** the `INTERNET` permission, declared in `:core:ocr`'s manifest, is used **only** for these user-initiated downloads. The final APK requests only `INTERNET` (plus AndroidX's internal dynamic-receiver permission); `ACCESS_NETWORK_STATE`, added by the ORT AAR, is removed with `tools:node="remove"` in the app manifest.
+- **⚠️ ONNX Runtime telemetry: disabled three ways** (found on-device 2026-10-08 from `ORTTelemetry` log lines; verified in ORT v1.30.0 sources).
+  - **What the AAR ships:** a `ContentProvider` `ai.onnxruntime.TelemetryInitializer` that auto-starts at every app launch and creates a 1DS Java `HttpClient`, plus connectivity and power receivers. In native code, `PosixTelemetry::enabled_` defaults to **true**.
+  - **Correction:** an earlier statement to the user that ORT "makes no network calls" was unverified and wrong.
+  - **Layer 1:** `Os.setenv("ORT_DISABLE_TELEMETRY", "1")` before `System.load`. Read via `getenv` in `telemetry_environment.h`; this triggers the full, irreversible suppression in `PosixTelemetry::Initialize` (no uploader, no events, no device id).
+  - **Layer 2:** the provider is removed from the merged manifest, so the Java transport never exists and Android telemetry is "unavailable".
+  - **Layer 3:** `OrtEnvironment.setTelemetry(false)`.
+  - **Verified on-device:** after install, the restarted process logs no `ORTTelemetry`/onnxruntime lines, and the APK manifest (aapt2 dump) has no `TelemetryInitializer`.
+  - **When bumping ORT, re-check** its telemetry code and manifest.
 
 ## 5. Architecture
 

@@ -2,6 +2,7 @@ package com.bo0sted.powerplusplus.ocr
 
 import ai.onnxruntime.OrtEnvironment
 import android.annotation.SuppressLint
+import android.system.Os
 import ai.onnxruntime.OrtSession
 import ai.onnxruntime.TensorInfo
 import java.io.File
@@ -14,6 +15,12 @@ import java.io.File
  * is `libonnxruntime.so`. Loading the engine first with `System.load(path)` registers that SONAME,
  * and the linker reuses it when the glue loads. So [load] must run before any `ai.onnxruntime` class
  * is touched. A loaded engine can't be unloaded; removing it takes effect after a restart.
+ *
+ * Microsoft's AAR also ships 1DS telemetry, enabled by default in native code. It is shut off three
+ * ways (verified in ORT 1.30 sources, AGENTS.md §4): `ORT_DISABLE_TELEMETRY=1` before the engine
+ * loads (full, irreversible suppression: no uploader, events or device id), removal of the AAR's
+ * `TelemetryInitializer` provider in the app manifest (so its Java HTTP transport never exists), and
+ * `OrtEnvironment.setTelemetry(false)`.
  */
 object OrtEngine {
     @Volatile
@@ -29,8 +36,10 @@ object OrtEngine {
         if (loadedFrom != null) return
         // Android 17 (targetSdk ≥ 37) rejects loading writable files.
         library.setReadOnly()
+        // Read with getenv when ORT initializes telemetry; must be set before the engine loads.
+        Os.setenv("ORT_DISABLE_TELEMETRY", "1", true)
         System.load(library.absolutePath)
-        OrtEnvironment.getEnvironment()
+        OrtEnvironment.getEnvironment().setTelemetry(false)
         loadedFrom = library.absolutePath
     }
 
