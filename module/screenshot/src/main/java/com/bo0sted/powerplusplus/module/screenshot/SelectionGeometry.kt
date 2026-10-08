@@ -42,8 +42,16 @@ class SelectionGeometry(private val bounds: Size, private val minSize: Float) {
             val side = max(minSize, min(rect.width, rect.height)).coerceAtMost(min(bounds.width, bounds.height))
             placeInside(Rect(Offset(rect.center.x - side / 2, rect.center.y - side / 2), Size(side, side)))
         }
-        SelectionShape.HorizontalStrip -> clampSize(Rect(0f, rect.top, bounds.width, rect.bottom))
-        SelectionShape.VerticalStrip -> clampSize(Rect(rect.left, 0f, rect.right, bounds.height))
+        // A strip keeps the current thickness, unless that spans the whole image (coming from the
+        // other strip), which would make it cover everything; then it takes its default thickness.
+        SelectionShape.HorizontalStrip -> {
+            val height = if (rect.height >= bounds.height) default(shape).height else rect.height
+            clampSize(Rect(0f, rect.center.y - height / 2, bounds.width, rect.center.y + height / 2))
+        }
+        SelectionShape.VerticalStrip -> {
+            val width = if (rect.width >= bounds.width) default(shape).width else rect.width
+            clampSize(Rect(rect.center.x - width / 2, 0f, rect.center.x + width / 2, bounds.height))
+        }
     }
 
     fun handles(shape: SelectionShape): List<Handle> = when (shape) {

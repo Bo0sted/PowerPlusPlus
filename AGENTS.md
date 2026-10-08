@@ -8,7 +8,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 - **Next action:**
   1. Install on the Pixel and smoke-test: the setup flow, power long-press → panel, blur/dim, Back, page swiping, the editor, and the Power menu module.
   2. ~~The text-pick UI and Screen text (§3.2)~~: done, and the user confirmed it works.
-  3. Smart screenshot step 1 + activation capture: built; **awaiting the user's on-device test**. The first check is whether a capture of the user's banking app shows its real content.
+  3. ~~Smart screenshot step 1 + activation capture~~: the user confirmed it works on-device. The banking app is captured with its real content, and Copy and Save work.
   4. Then the Smart screenshot step-2 editor, then OCR (§3.3, §4).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
@@ -103,7 +103,7 @@ A separate module from 3.2. The flow:
   - defaults: rectangle 60 % × 35 % of the screen, circle 60 % of the short side, horizontal strip 20 % of the height, vertical strip 40 % of the width
   - 48 dp minimum
   - strips move only across their axis and have edge handles only; the circle stays square, anchored at the opposite corner
-  - `reshape` converts between shapes, keeping the position
+  - `reshape` converts between shapes, keeping the position. A strip keeps the current thickness unless it spans the whole image (coming from the other strip), in which case it uses the default thickness. Fixed after the user reported the vertical strip opening at full width.
 - **Crop:** the circle uses an antialiased oval clip on a transparent ARGB bitmap (transparent corners, decided by the user).
 - **`ScreenshotOutput`:**
   - **Copy/Share** write a PNG to `cacheDir/screenshots/`, served by the module's own FileProvider (`${applicationId}.screenshots`), and keep only the 5 newest files.

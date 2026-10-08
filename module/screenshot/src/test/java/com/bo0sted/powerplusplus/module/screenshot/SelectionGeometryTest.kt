@@ -24,6 +24,17 @@ class SelectionGeometryTest {
     }
 
     @Test
+    fun switchingBetweenStripsUsesTheDefaultThicknessInsteadOfTheFullSpan() {
+        val horizontal = geometry.default(SelectionShape.HorizontalStrip)
+        val vertical = geometry.reshape(horizontal, SelectionShape.VerticalStrip)
+        assertEquals(geometry.default(SelectionShape.VerticalStrip).width, vertical.width)
+        assertEquals(horizontal.center.x, vertical.center.x)
+
+        val backToHorizontal = geometry.reshape(vertical, SelectionShape.HorizontalStrip)
+        assertEquals(geometry.default(SelectionShape.HorizontalStrip).height, backToHorizontal.height)
+    }
+
+    @Test
     fun stripHandlesOnlyResizeTheAdjustableSide() {
         val strip = Rect(0f, 800f, 1000f, 1200f)
         assertEquals(Rect(0f, 700f, 1000f, 1200f), geometry.resize(strip, Handle.Top, Offset(40f, -100f), SelectionShape.HorizontalStrip))
