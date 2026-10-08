@@ -4,22 +4,29 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-- **Current phase:** the core framework is built and compiles, and lint is clean (§5, §10). The Power menu module exists. **Nothing has run on a device yet.**
-- **Next action:**
-  1. Install on the Pixel and smoke-test: the setup flow, power long-press → panel, blur/dim, Back, page swiping, the editor, and the Power menu module.
-  2. ~~The text-pick UI and Screen text (§3.2)~~: done, and the user confirmed it works.
-  3. ~~Smart screenshot step 1 + activation capture~~: the user confirmed it works on-device. The banking app is captured with its real content, and Copy and Save work.
-  4. Smart screenshot step-2 editor: built.
-     - The user found: missing top-bar buttons, stroke lag, and no editable text. All fixed 2026-10-08, **and the user confirmed everything works**, including Max/Default.
-  5. OCR engine and model manager (§4): **verified on-device**.
-     - The user downloaded both components; the engine loaded via `System.load` and the glue linked (`nativeloader … ok`).
-     - Load check: **18,708 characters / 18,710 recognition classes** (blank + space confirmed).
-     - The AAR was deleted, and the engine is read-only.
-     - Files were migrated to `no_backup/ocr`, and telemetry is off.
-  6. Then the OCR pipeline and OCR text search module (§3.3).
+**Session 1 ended 2026-10-08 with everything committed. Pushing to a remote happens at hand-off (§10).**
+
+- **State:** every v1 piece except **OCR text search** is built and **confirmed working by the user on-device**:
+  - the panel and trigger (§2)
+  - Power menu (§3.1)
+  - Screen text (§3.2)
+  - Smart screenshot, both the selection and the editor (§3.4)
+  - the activation screenshot and Retake (§3.5, §3.5b)
+  - the OCR engine/model manager, with ORT telemetry disabled (§4)
+- **Next action: build OCR text search (§3.3).** The full plan is in §3.3; build it in this order, with an on-device checkpoint after step 2:
+  1. **The pipeline in `:core:ocr`** (`PpOcr` or similar): detection + recognition with the exact parameters in §3.3. Unit-test the pure parts (DB post-processing on a synthetic probability map, CTC decoding).
+  2. **On-device checkpoint:** a temporary debug path that runs OCR on the activation screenshot and logs the lines. Ask the user to test, and measure the time per stage.
+  3. **`:module:ocrtext`**: cursor → double-tap → drag region → Confirm/Reset/Retake → results as tappable boxes over the frozen image.
+  4. Add it to `app/build.gradle.kts`/`settings.gradle.kts`, test with the user, update this file, and commit.
+- **How work is done here:**
+  - Verify every API against AOSP or the pinned library source before relying on it. §11 lists what's already verified; don't re-research those.
+  - Lint must stay at zero issues.
+  - Commit after each confirmed step.
+  - The user tests on a Pixel 9 Pro XL (Android 17) over **wireless adb**. The address changes per session; ask the user for the `adb connect` line.
+  - **Don't send input (taps or swipes) to the user's device.** Read state only (logcat, dumpsys, screencap) and ask the user to interact.
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
-- **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
-- **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. No XGesture code is copied verbatim; where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
+- **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs). The remote is recorded in §10 once it's set.
+- **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. Where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
 
 ## 1. What the app is
 
@@ -88,15 +95,45 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **Copy:** `ClipData.newPlainText`. A "Copied" toast only on API ≤ 32, because Android 13+ shows its own clipboard confirmation and the official copy/paste guide says not to duplicate it.
 - Future actions (search, translate…) may come later.
 
-### 3.3 OCR text search
-A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **frozen activation capture by default**, exactly like Smart screenshot (`usesActivationScreenshot = true`), with **Retake** next to Confirm/Reset for dynamic content. The flow:
-1. Tapping the module shows a **draggable cursor**.
-2. **Double-tapping** the screen starts screenshot capture. The user drags to choose the region, the same way XGesture does it.
-3. When dragging stops, **Confirm** and **Reset** buttons appear. Reset starts a new capture; Confirm runs OCR.
-4. The results show as **clickable boxes**, the same as accessibility text search.
+### 3.3 OCR text search — **NEXT TO BUILD**
+
+A separate module from 3.2: `:module:ocrtext`, typeId `ocr_text`, title "OCR text", `usesActivationScreenshot = true`.
+
+**Decided (user, 2026-10-08):** it works on the **frozen activation capture by default**, exactly like Smart screenshot, with **Retake** (§3.5b, `ScreenRecapture`) next to Confirm/Reset for dynamic content.
+
+**User-specified flow** (verbatim intent; follow it exactly):
+1. Tapping the module shows a **draggable cursor** (over the frozen capture).
+2. Once the cursor is where the region should start, the user **double-taps** to start the capture, then **drags** to define the region (a rectangle from the start point to the finger).
+3. When the drag stops, **Confirm** and **Reset** buttons appear, plus **Retake** on Android 14+. Reset starts a new region; Confirm runs OCR on that region.
+4. The OCR results show as **clickable boxes**, the same UI as Screen text (`:core:textpick`), with Copy.
+
+**Implementation plan:**
+- **Entry:** like `SmartScreenshotModule`.
+  1. `host.activationScreenshot.take()`; if there's none, toast "Couldn't capture the screen".
+  2. Make a software copy and run `looksBlocked`, toasting "This app blocks screenshots" if needed. Consider moving these helpers from `:module:screenshot` to a shared place instead of duplicating them.
+  3. Show a focusable `OverlayWindow` that draws the frozen image full-screen.
+  4. If the OCR model isn't installed (`OcrComponents.isInstalled(OcrCatalog.PP_OCR_V6_MEDIUM)`), show a message pointing to Settings → OCR engine and models.
+- **Results:** reuse `TextPickScreen`, but it currently draws over the *live* screen. Add an optional background image parameter so OCR results sit on the frozen capture (the live app may be hidden). Block bounds are screen pixels, and the capture is display-sized, so OCR coordinates (region offset + box) map 1:1.
+- **XGesture note:** XGesture's regional pick (`overlay/RegionalPickOverlay.kt`) is driven by its floating-ball drag (a region starts once the finger moves ≥16 dp from the anchor), not by a double-tap. Power++ follows the **user's** double-tap flow above; only the visual idea (cursor + rectangle preview) comes from XGesture.
+
+**Pipeline** (`:core:ocr`). The parameters come from the pinned configs (§4); verify anything not listed against PaddleOCR's source before relying on it:
+- **Engine:** `OrtEngine.load(OcrComponents.engineLibrary())`, then create `OrtSession`s for `det.onnx`/`rec.onnx` from `OcrComponents.directory(PP_OCR_V6_MEDIUM)`. Create them once and keep them (model loading is slow). Consider releasing them when the accessibility service is destroyed.
+- **Detection (DBNet):**
+  - **Input:** the region crop, channels in **BGR order**, each normalised `(x/255 − mean[c]) / std[c]` with mean `[0.485, 0.456, 0.406]` and std `[0.229, 0.224, 0.225]` applied to channels **in BGR order** (PaddleOCR's `NormalizeImage` on a BGR image), CHW, batch 1.
+  - **Size:** resize so both sides are multiples of 32. The `DetResizeForTest` limit isn't in the yml: check PaddleOCR's PP-OCRv6 default (`limit_side_len`/`limit_type`) before choosing. Screens are tall (1344×2992) with small text, so too small a limit misses text; measure on-device.
+  - **Output:** a probability map `[1,1,H,W]`. Binarise at `thresh` **0.2**, find connected components, and for each compute its box and its mean probability; keep those ≥ `box_thresh` **0.45**, at most **3000** candidates.
+  - **Unclip:** expand by `d = area × 1.4 / perimeter` (`unclip_ratio` **1.4**). Axis-aligned boxes are fine for screen text; rotated boxes are optional.
+  - Scale the boxes back to the crop, then offset by the region.
+- **Recognition (CTC):**
+  - For each box, crop from the **original** (not resized) image; if `h ≥ 1.5·w`, rotate 90° (PaddleOCR does this for vertical text).
+  - Resize to **height 48**, keeping the aspect ratio; normalise `(x/255 − 0.5)/0.5`, BGR.
+  - Batching: sort by aspect ratio, batch about 8, pad the width with zeros to the batch's max width (PaddleOCR behaviour); verify the padding value.
+  - **Output `[n, t, 18710]`** (confirmed on-device): index 0 = CTC blank, 1..18708 = `RecognitionDictionary` entries, 18709 = space. Greedy decode: argmax per step, collapse repeats, drop blanks. The score is the mean max probability; drop lines with very low scores (PaddleOCR's `drop_score` default is 0.5 — verify).
+- **Threading:** run everything on `Dispatchers.Default` and show progress in the overlay. Measure the time per stage on-device at the checkpoint.
+- **Line merging:** each recognised box becomes one `TextBlock`; `normalizeTextBlocks` already sorts them in reading order.
 
 ### 3.4 Smart screenshot
-- **Step 1 is implemented** as `:module:screenshot` (typeId `smart_screenshot`, `usesActivationScreenshot = true`). **Step 2 (the editor) is implemented** and awaiting the user's on-device test.
+- **Step 1 is implemented** as `:module:screenshot` (typeId `smart_screenshot`, `usesActivationScreenshot = true`). **Step 2 (the editor) is implemented.** Both steps are confirmed working by the user on-device.
 - **Flow:**
   1. The module `take()`s the activation screenshot (toast "Couldn't capture the screen" if there is none).
   2. It makes a software ARGB copy (`Dispatchers.Default`).
@@ -160,7 +197,7 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
   - bottom: tool options above the tool row (Pen · Arrow · Rectangle · Oval · Text · Blur · Pixelate)
   - Text: tap the image → a dialog with a text field → the label is placed at the tap point
 
-### 3.5 Activation screenshot (proposed by the user 2026-10-08; design agreed in principle, details pending §7)
+### 3.5 Activation screenshot (user's idea, 2026-10-08; implemented and confirmed on-device)
 - **Problem:** some apps (the user's banking apps) hide their content as soon as Power++ activates. A system screenshot taken earlier still captures the real content, because the app only hides *after* the system's screenshot notification.
 - **Implemented** in `PanelController.show()`:
   - If any enabled slot's module has `usesActivationScreenshot`, call `takeScreenshot` → `Bitmap.wrapHardwareBuffer` (closing the buffer right away is safe, because the bitmap keeps its own reference) → `host.activationScreenshot.replace(bitmap)` → add the panel. On failure the panel opens anyway.
@@ -184,8 +221,8 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
   | power → panel added, total | 49–79 ms |
 
   The user noticed no slowdown. **Conclusion: capturing at activation is perceptually free.**
-  - The temporary experiment code is in `PanelController.show()`/`logTiming` ("TIMING EXPERIMENT"). It captures, then discards the buffer, then shows the panel. **Replace it** with the real activation-screenshot store when §3.5 is built.
-  - Not yet verified: that the capture contains the banking app's real content. That's the first on-device check once the capture is actually used.
+  - The temporary timing code has been removed, replaced by the real implementation above.
+  - **Confirmed by the user:** the activation capture contains the banking app's real content.
 - **Decided (user, 2026-10-08):**
   - Capture at activation, **only when the panel contains a module that uses the screenshot** (Smart screenshot or OCR).
   - If the capture is black (a `FLAG_SECURE` app), show a message (e.g. "This app blocks screenshots") instead of opening the editor.
@@ -217,7 +254,7 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
 
 ## 4. OCR engines and models
 
-**Implemented 2026-10-08** as `:core:ocr` plus the settings section "OCR engine and models" (`app/settings/OcrSection.kt`). Awaiting the user's on-device test. The OCR *pipeline* and module aren't built yet.
+**Implemented 2026-10-08** as `:core:ocr` plus the settings section "OCR engine and models" (`app/settings/OcrSection.kt`). **Verified on-device** (the user downloaded both components; see §10). The OCR *pipeline* and module aren't built yet (§3.3).
 
 - **Nothing is bundled.** The engine and models are downloaded on demand, kept in **`noBackupFilesDir/ocr/<componentId>/`**, and removable (with confirmation). Uninstalling deletes them.
   - **Why no-backup storage:** Auto Backup includes `filesDir`, and with more than 25 MB it "doesn't back up data to the cloud" at all (developer.android.com/identity/data/autobackup). The ~170 MB of OCR files would silently stop the settings from being backed up.
@@ -250,7 +287,7 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
   - **installed = a marker file written last**, after verification **and** a load check
 - **Load check (`OrtEngine`):**
   - **Engine:** `System.load(path)` (made read-only first, as Android 17 requires), then `OrtEnvironment.getEnvironment()`.
-  - **Models:** detection input `[n,3,h,w]` → output `[n,1,h,w]`; recognition input `[n,3,48,w]` → output `[n,t,C]` with `C` = dictionary + 1 or + 2. The actual `C` is logged (tag `PowerPP.Ocr`). Expected 18,710 = 18,708 characters + CTC blank + space (PaddleOCR `use_space_char`); **to be confirmed on-device**.
+  - **Models:** detection input `[n,3,h,w]` → output `[n,1,h,w]`; recognition input `[n,3,48,w]` → output `[n,t,C]` with `C` = dictionary + 1 or + 2. The actual `C` is logged (tag `PowerPP.Ocr`). **Confirmed on-device: 18,710** = 18,708 characters + CTC blank + space (PaddleOCR `use_space_char`).
 - **How the downloaded engine loads** (verified in sources):
   - On Android, ORT 1.30's `OnnxRuntime.init()` only `loadLibrary`s the JNI glue `libonnxruntime4j_jni.so`.
   - `readelf`: the glue has `NEEDED libonnxruntime.so`; the engine's `SONAME` is `libonnxruntime.so`, and it depends only on libc, libm, libdl, liblog and libandroid.
@@ -258,7 +295,7 @@ A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **fr
   - So: `System.load(engine)` → then any `ai.onnxruntime` use. The app excludes `**/libonnxruntime.so` from packaging; the APK ships only the glue (111 KB arm64).
   - A loaded engine can't be unloaded; removal takes effect after a restart.
 - **The version is pinned once:** `libs.versions.toml` `onnxruntime` → `BuildConfig.ORT_VERSION`. `OcrCatalogTest` fails if the catalog's engine version or URL disagrees.
-- **Pipeline parameters** (from the pinned configs, for the pipeline still to build):
+- **Pipeline parameters** (from the pinned configs; the full plan is in §3.3):
   - Detection: BGR; normalise with mean `[0.485, 0.456, 0.406]`, std `[0.229, 0.224, 0.225]` after /255; DB post-processing thresh 0.2, box_thresh 0.45, unclip 1.4, max 3000 candidates; TensorRT optimum shape 736.
   - Recognition: BGR; resize to height 48 (reference width 320); CTC decode.
   - `RecognitionDictionary` parses the dictionary; it's unit-tested against the quoting rules (PyYAML reads 18,708 plain or single-quoted entries).
@@ -308,18 +345,15 @@ Nothing else changes.
 
 **Commands:**
 - `./gradlew :app:assembleDebug` builds the debug APK.
-- `./gradlew :core:data:testDebugUnitTest` runs the unit tests.
+- Unit tests: `./gradlew :core:data:testDebugUnitTest :core:textpick:testDebugUnitTest :module:screenshot:testDebugUnitTest :core:ocr:testDebugUnitTest` (all pass, 2026-10-08).
+- Install on the device: `./gradlew :app:installDebug` (needs `adb connect <ip:port>` first).
 - `./gradlew :app:lintDebug` (and `:<module>:lintDebug`) runs lint. Keep lint at zero issues.
 - The single remaining Gradle deprecation warning (`Configuration.setVisible`) comes from a third-party plugin, not our scripts.
 - On first build, AGP auto-installed `build-tools;36.0.0` and `platform-tools` from Google, under the licenses already accepted.
 
 **Machine:** Arch Linux. The user requires tools from **Arch's official repos only, never the AUR**.
 
-**State as of 2026-10-08:**
-- Only OpenJDK 17 is installed (the default).
-- No Android SDK (`~/Android/Sdk` doesn't exist, `ANDROID_HOME` is unset).
-- `adb` is at `/usr/bin/adb`, from `extra/android-tools`.
-- No device is attached.
+**Before setup (historical, 2026-10-08):** only OpenJDK 17 was installed, and there was no Android SDK. `adb` is at `/usr/bin/adb`, from `extra/android-tools`.
 
 **Installed and decided (2026-10-08):**
 - **JDK 21 LTS** from `extra/jdk21-openjdk`, at `/usr/lib/jvm/java-21-openjdk`. The system default is still JDK 17. Gradle's daemon JVM is pinned to 21 via `gradle/gradle-daemon-jvm.properties`, and JDK auto-download is disabled (`org.gradle.java.installations.auto-download=false`), since the user allows only Arch-official tooling.
@@ -337,8 +371,14 @@ Nothing else changes.
 
 ## 7. Open questions waiting on the user
 
-1. **Circle crop output** (§3.6): the result is a square image, so the corners outside the circle must be (a) transparent PNG (recommended), (b) kept (the circle is only a guide), or (c) filled with a colour. Asked 2026-10-08; the user asked why it would ever be transparent, the options were explained, and the answer is pending.
-2. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
+1. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet. (Pushing doesn't send the reflog.)
+
+**Answered:**
+- **Circle crop:** transparent corners (PNG).
+- **Lock screen:** open the system power menu instead (§8).
+- **Retake:** placement as in §3.5b.
+- **OCR:** uses the frozen capture.
+- **Auto Backup:** the user doesn't use it, but downloads stay in no-backup storage regardless.
 
 ## 8. Decision log
 
@@ -381,20 +421,24 @@ Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/
 
 ## 10. Status
 
-**Done:**
-- Requirements gathered; XGesture reviewed; toolchain installed.
-- Gradle scaffold with convention plugins.
-- Module SPI, panel config with edits and tests, overlay window.
-- Assistant trigger, accessibility service, panel UI, settings UI (setup checklist, layout editor, appearance).
-- Power menu module.
-- Lint is clean across all modules.
+**Done, and confirmed working by the user on-device (Pixel 9 Pro XL, Android 17), 2026-10-08:**
+- **Toolchain** (§6) and the **Gradle scaffold** with convention plugins.
+- **Framework:** assistant trigger; panel with blur/dim, pages, swipe axis and the empty state; dismissal on Back and screen off; lock screen → system power menu.
+- **Settings:** setup checklist; layout editor (add/move/remove/disable, pages, grid resize reflow); appearance.
+- **Power menu** module (§3.1).
+- **Screen text** module (§3.2).
+- **Smart screenshot** (§3.4):
+  - activation capture, including of the banking app
+  - the four shapes, Max/Default and Retake
+  - Copy/Save/Share
+  - the editor with all tools, text selection/editing/background, undo/redo, persisted sliders and the action row at the bottom
+- **OCR engine/model manager** (§4): downloads, verification, load check, no-backup storage, telemetry disabled.
+- **Lint:** zero issues across modules. All unit tests pass.
 
-**Not yet done:**
-- **On-device testing (Pixel 9 Pro XL, Android 17), 2026-10-08:**
-  - Confirmed working by the user: install and launch, the setup checklist, the accessibility service, Power++ as Digital assistant, power long-press → panel, Back closes, page swiping, the editor adding a module and a second page, Dimmed black, the Power menu module.
-  - Blur was broken, then fixed (see §11); the user confirmed it works.
-  - Later the same day the user confirmed these also work: move/remove/disable in the editor, the grid resize reflow, horizontal swipe, the empty-state panel, and dismissal on screen off.
-- Accessibility text search, Smart screenshot, OCR text search, and the OCR model/engine manager.
+**Not done:**
+- **OCR text search** (§3.3): the pipeline and module. **This is the next task.**
+
+**Remote:** not set as of the end of the session; see the hand-off note below once it is.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
 
@@ -445,7 +489,8 @@ Re-verify only if the target platform changes.
 
 ## 11b. Open technical questions
 
-- Is `takeScreenshot` latency and rate-limiting good enough for XGesture-like capture?
+- ~~Is `takeScreenshot` fast enough?~~ Yes: 9–32 ms (§3.5).
+- What detection input size gives the best accuracy/speed for full-screen captures on a Pixel 9 Pro XL? Measure at the OCR checkpoint.
 - What does the Pixel's power long-press pass in `onShow` args (`invocation_type`)? Not needed yet; would allow distinguishing the power button from other assistant gestures.
 
 ## 12. Known risks and potential bugs
