@@ -4,6 +4,9 @@
 
     <string name="action_cancel">Cancel</string>
 
+    <string name="panel_empty">No modules added. Please add one.</string>
+    <string name="panel_close">Close</string>
+
     <string name="setup_title">Setup</string>
     <string name="setup_accessibility_title">Accessibility service</string>
     <string name="setup_accessibility_body">Turn on Power++ under Accessibility → Downloaded apps. If the switch is greyed out, open App info, tap ⋮ and choose Allow restricted settings first.</string>

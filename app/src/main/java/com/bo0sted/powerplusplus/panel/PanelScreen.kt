@@ -17,7 +17,9 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import com.bo0sted.powerplusplus.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import com.bo0sted.powerplusplus.data.PanelConfig
@@ -50,12 +54,17 @@ internal fun PanelScreen(
     onDismiss: () -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { config.pages.size })
+    val hasModules = config.pages.any { page -> page.slots.any { it.enabled && registry[it.typeId] != null } }
     Box(
         modifier = Modifier
             .fillMaxSize()
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
             .safeDrawingPadding(),
     ) {
+        if (!hasModules) {
+            EmptyPanel(onClose = onDismiss)
+            return@Box
+        }
         val page: @Composable (Int) -> Unit = { index ->
             PanelPageGrid(config, config.pages[index], registry, host, onAction, onToggle)
         }
@@ -112,6 +121,24 @@ private fun PanelPageGrid(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyPanel(onClose: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Text(
+                stringResource(R.string.panel_empty),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+            )
+        }
+        Button(onClick = onClose) { Text(stringResource(R.string.panel_close)) }
     }
 }
 

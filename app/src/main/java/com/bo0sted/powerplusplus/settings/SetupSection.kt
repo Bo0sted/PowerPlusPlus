@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
@@ -82,7 +83,7 @@ private fun SetupStep(done: Boolean?, title: String, body: String, actions: @Com
         when (done) {
             true -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
             false -> Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.error)
-            null -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.outline)
+            null -> Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.outline)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
