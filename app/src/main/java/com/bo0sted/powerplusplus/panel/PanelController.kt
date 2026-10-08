@@ -2,11 +2,6 @@ package com.bo0sted.powerplusplus.panel
 
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bo0sted.powerplusplus.data.Backdrop
@@ -45,12 +40,6 @@ class PanelController @Inject constructor(
 
     private var window: OverlayWindow? = null
 
-    /** Closes the panel when the screen turns off, which covers both locking and sleep. */
-    private val screenOffReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = dismiss()
-    }
-    private var receiverContext: Context? = null
-
     enum class ShowResult { Shown, SystemPowerMenu, ServiceUnavailable }
 
     /**
@@ -75,15 +64,8 @@ class PanelController @Inject constructor(
             Backdrop.Dim -> OverlayBackdrop.Dim()
         }
 
-        val overlay = OverlayWindow(host.service, backdrop, onBack = ::dismiss)
+        val overlay = OverlayWindow(host.service, backdrop, onDismissRequest = ::dismiss)
         window = overlay
-        ContextCompat.registerReceiver(
-            host.service,
-            screenOffReceiver,
-            IntentFilter(Intent.ACTION_SCREEN_OFF),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
-        receiverContext = host.service
         overlay.show {
             val current by config.collectAsStateWithLifecycle()
             PowerTheme(darkTheme = true) {
@@ -106,8 +88,6 @@ class PanelController @Inject constructor(
     fun dismiss() {
         window?.dismiss()
         window = null
-        receiverContext?.unregisterReceiver(screenOffReceiver)
-        receiverContext = null
     }
 
     private companion object {

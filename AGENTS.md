@@ -7,7 +7,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 - **Current phase:** the core framework is built and compiles, and lint is clean (§5, §10). The Power menu module exists. **Nothing has run on a device yet.**
 - **Next action:**
   1. Install on the Pixel and smoke-test: the setup flow, power long-press → panel, blur/dim, Back, page swiping, the editor, and the Power menu module.
-  2. Then the shared text-pick UI and the Accessibility text search module (§3.2).
+  2. ~~The text-pick UI and Screen text (§3.2)~~: done; it needs the user's on-device test.
   3. Then Smart screenshot (§3.4), then OCR (§3.3, §4).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
@@ -64,9 +64,21 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - It's an ordinary module, placed on a page like any other.
 
 ### 3.2 Accessibility text search
-- Reads on-screen text from the accessibility node tree. Tappable boxes are drawn over each text item, and the user selects text and acts on it.
-- The final look and behavior should be **very similar to XGesture's** text pick and result panel (§9).
-- **v1 offers a single action on selected text: Copy.** More actions (search, translate…) may come later.
+- **Implemented** as `:module:screentext` (typeId `screen_text`, "Screen text").
+- **XGesture equivalent:** its "Universal copy" (`app/src/main/java/com/slideindex/app/copy/UniversalCopyOverlay.kt` + `service/AccessibilityTextExtractor.kt`). Same UX, written independently:
+  - a light scrim with a rounded box around each text item
+  - tap toggles; tapping empty space closes
+  - a bottom pill toolbar: "Tap text to select it" / "N selected", Select all ↔ Deselect all, Copy (disabled until something is selected), ×
+  - Copy joins the selection in reading order, one per line, and closes
+  - "No text found on screen" toast when there's nothing
+  - XGesture's extra "Segment" button (its word-split panel) is intentionally **not** included; v1 is Copy-only.
+- **Reading:** all windows from `service.windows`, except accessibility overlays, the IME and our own package.
+  - Per node: `text`, else `contentDescription`, else `stateDescription`.
+  - Nodes without `text` must be `isVisibleToUser`; nodes with `text` are kept even when not visible (XGesture found chat apps report message bodies that way). Bounds are clipped to the window.
+  - **Password fields are always skipped** (an improvement over XGesture).
+  - Traversal runs on `Dispatchers.Default`.
+- **Copy:** `ClipData.newPlainText`. A "Copied" toast only on API ≤ 32, because Android 13+ shows its own clipboard confirmation and the official copy/paste guide says not to duplicate it.
+- Future actions (search, translate…) may come later.
 
 ### 3.3 OCR text search
 A separate module from 3.2. The flow:
@@ -125,8 +137,9 @@ A separate module from 3.2. The flow:
 | `:core:ui` | `PowerTheme` |
 | `:core:module` | The module SPI: `PanelModule` (sealed), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService` plus a scope tied to the connection), `ModuleRegistry` |
 | `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. |
-| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners, Back handling, and blur with live fallback to dim. Single use: create a new one each time. |
-| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`. |
+| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing). Single use: create a new one each time. |
+| `:core:textpick` | Shared text-selection overlay, used by Screen text and (later) OCR. `TextBlock(text, IntRect screen px)`; `normalizeTextBlocks` drops container summaries (blocks enclosing a smaller block), blanks and duplicates, and sorts in reading order. `hitTest` picks the smallest block under the tap, with 10dp slop. `TextPickScreen` + `showTextPick(service, blocks)`. All of this is unit-tested. |
+| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`. |
 | `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`), and the settings UI (`settings/`: setup checklist, layout editor, appearance). |
 
 ### Adding a module type

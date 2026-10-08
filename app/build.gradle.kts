@@ -30,6 +30,7 @@ dependencies {
 
     // Panel modules. Adding one here is all it takes to make it available in the editor.
     implementation(project(":module:powermenu"))
+    implementation(project(":module:screentext"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

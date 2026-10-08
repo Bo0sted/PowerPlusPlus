@@ -2,7 +2,10 @@ package com.bo0sted.powerplusplus.overlay
 
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.os.Build
 import android.view.Gravity
@@ -14,6 +17,7 @@ import android.window.OnBackInvokedDispatcher
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -31,18 +35,22 @@ import java.util.function.Consumer
  * [WindowManager] carries the token that lets it add accessibility overlays, which is why Power++
  * needs no "display over other apps" permission. One instance shows once; create a new one each time.
  *
- * @param onBack called when the user presses or swipes Back while the window has focus.
+ * @param onDismissRequest called when the user presses or swipes Back, or when the screen turns off
+ *   (which covers both locking and sleep). The owner decides how to dismiss.
  */
 class OverlayWindow(
     private val service: AccessibilityService,
     private val backdrop: OverlayBackdrop = OverlayBackdrop.None,
-    private val onBack: () -> Unit,
+    private val onDismissRequest: () -> Unit,
 ) : LifecycleOwner, SavedStateRegistryOwner {
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val savedStateController = SavedStateRegistryController.create(this)
     private val windowManager = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val blurListener = Consumer<Boolean> { enabled -> applyBackdrop(blurAvailable = enabled) }
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = onDismissRequest()
+    }
     private var root: OverlayRoot? = null
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
@@ -61,7 +69,7 @@ class OverlayWindow(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent(content)
         }
-        val overlayRoot = OverlayRoot(service, onBack).apply {
+        val overlayRoot = OverlayRoot(service, onDismissRequest).apply {
             addView(compose)
             setViewTreeLifecycleOwner(this@OverlayWindow)
             setViewTreeSavedStateRegistryOwner(this@OverlayWindow)
@@ -69,6 +77,13 @@ class OverlayWindow(
         root = overlayRoot
         windowManager.addView(overlayRoot, layoutParams())
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+        // The system delivers its own broadcasts to non-exported receivers (BroadcastSkipPolicy).
+        ContextCompat.registerReceiver(
+            service,
+            screenOffReceiver,
+            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
         if (backdrop is OverlayBackdrop.Blur) {
             // Called immediately with the current state, then on every change (e.g. battery saver).
@@ -79,6 +94,7 @@ class OverlayWindow(
     fun dismiss() {
         val current = root ?: return
         root = null
+        service.unregisterReceiver(screenOffReceiver)
         if (backdrop is OverlayBackdrop.Blur) windowManager.removeCrossWindowBlurEnabledListener(blurListener)
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         // The system may already have removed the window (for example on screen off).

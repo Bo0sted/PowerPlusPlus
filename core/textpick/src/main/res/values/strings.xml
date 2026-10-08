@@ -1,0 +1,13 @@
+<resources>
+    <string name="textpick_hint">Tap text to select it</string>
+    <plurals name="textpick_selected">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="textpick_select_all">Select all</string>
+    <string name="textpick_deselect_all">Deselect all</string>
+    <string name="textpick_copy">Copy</string>
+    <string name="textpick_close">Close</string>
+    <string name="textpick_copied">Copied</string>
+    <string name="textpick_no_text">No text found on screen</string>
+</resources>
