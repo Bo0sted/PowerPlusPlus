@@ -27,7 +27,11 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 ### 2.1 Trigger: power-button long-press
 - Power++ registers as the device's **Digital assistant** (`VoiceInteractionService` + `VoiceInteractionSessionService`, role `android.app.role.ASSISTANT`).
 - The user sets *Settings → System → Gestures → Press & hold power button → Digital assistant*. On Pixel and AOSP-like Android 12+ devices, a long-press then starts our session.
-- When the session is shown, it immediately hands off to the overlay (§2.2) and finishes itself.
+- When the session is shown, it immediately hands off to the overlay (§2.2) and hides itself. `PanelController.show()` returns one of:
+  - `Shown`
+  - `SystemPowerMenu`: the lock screen is showing (`KeyguardManager.isKeyguardLocked`, which also covers swipe-only and occluded lock screens), so `GLOBAL_ACTION_POWER_DIALOG` is performed instead. It reaches `PhoneWindowManager.showGlobalActionsInternal`, the same path as a stock power long-press, and the system shows its lock-screen variant of the menu.
+  - `ServiceUnavailable`: accessibility is off, so the session opens Power++'s settings.
+- The panel also closes itself on `ACTION_SCREEN_OFF`, which covers both locking and sleep.
 - **No root and no LSPosed.** The user rejected them because the platform supports this natively.
 - **Devices where power long-press can't open a third-party assistant (e.g. Samsung One UI) are not supported in v1.** There is no fallback trigger. A later version may add one.
 - Taking over the assistant role replaces Gemini/Google Assistant. The user accepts this.
@@ -172,10 +176,7 @@ Nothing else changes.
 
 ## 7. Open questions waiting on the user
 
-1. **Lock screen:** should the panel be usable from the lock screen? Some modules (screenshots, reading screen text) raise privacy questions there.
-   - Current behavior: nothing special is done; `supportsLaunchVoiceAssistFromKeyguard` isn't declared.
-   - Asked 2026-10-08; no answer yet.
-2. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
+1. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
 
 ## 8. Decision log
 
@@ -196,6 +197,8 @@ All decisions are from 2026-10-08.
 - **Build tools:** Arch official repos only, never the AUR. The Android SDK comes directly from Google, the only non-AUR source, which the user approved. Gradle comes from the wrapper.
 - **OCR inference engine:** ONNX Runtime.
 - **Gemini/Assistant:** losing them is accepted.
+- **Lock screen** (user, 2026-10-08): the panel never shows while the lock screen is up. Instead, a power long-press opens the **system power menu**, with no overlay rendered (see §2.1).
+  - Observed before the fix: the assistant session *is* invoked on the lock screen even without `supportsLaunchVoiceAssistFromKeyguard`, and the accessibility overlay draws over the keyguard.
 
 ## 9. XGesture reference map
 

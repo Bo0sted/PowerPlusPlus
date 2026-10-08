@@ -1,5 +1,7 @@
 package com.bo0sted.powerplusplus.panel
 
+import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -49,10 +51,24 @@ class PanelController @Inject constructor(
     }
     private var receiverContext: Context? = null
 
-    /** Shows the panel, or does nothing if it is already showing. Returns false if it can't be shown. */
-    fun show(): Boolean {
-        if (window?.isShowing == true) return true
-        val host = hostProvider.host.value ?: return false
+    enum class ShowResult { Shown, SystemPowerMenu, ServiceUnavailable }
+
+    /**
+     * Shows the panel, or does nothing if it is already showing.
+     *
+     * The panel never appears over the lock screen. There, the system power menu opens instead —
+     * through the same `PhoneWindowManager.showGlobalActionsInternal` path a plain power long-press
+     * uses, so the system decides what the lock-screen menu offers. `isKeyguardLocked` is true
+     * whenever the lock screen is showing, including a swipe-only one and one occluded by another
+     * activity (e.g. a call).
+     */
+    fun show(): ShowResult {
+        if (window?.isShowing == true) return ShowResult.Shown
+        val host = hostProvider.host.value ?: return ShowResult.ServiceUnavailable
+        if (host.service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            host.service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG)
+            return ShowResult.SystemPowerMenu
+        }
         val density = host.service.resources.displayMetrics.density
         val backdrop = when (config.value.backdrop) {
             Backdrop.Blur -> OverlayBackdrop.Blur(radiusPx = (BLUR_RADIUS_DP * density).roundToInt())
@@ -84,7 +100,7 @@ class PanelController @Inject constructor(
                 )
             }
         }
-        return true
+        return ShowResult.Shown
     }
 
     fun dismiss() {

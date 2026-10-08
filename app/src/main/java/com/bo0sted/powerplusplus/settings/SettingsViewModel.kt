@@ -48,5 +48,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { repository.edit(transform) }
     }
 
-    fun openPanel(): Boolean = panel.show()
+    fun openPanel() {
+        panel.show()
+    }
 }

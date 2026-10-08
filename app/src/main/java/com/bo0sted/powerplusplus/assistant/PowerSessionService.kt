@@ -31,9 +31,11 @@ private class PowerSession(context: Context, private val panel: PanelController)
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
-        if (!panel.show()) {
+        when (panel.show()) {
+            PanelController.ShowResult.Shown, PanelController.ShowResult.SystemPowerMenu -> Unit
             // The accessibility service isn't connected, so there is nothing to draw with.
-            startAssistantActivity(Intent(context, MainActivity::class.java))
+            PanelController.ShowResult.ServiceUnavailable ->
+                startAssistantActivity(Intent(context, MainActivity::class.java))
         }
         hide()
     }
