@@ -12,4 +12,6 @@ import kotlinx.coroutines.CoroutineScope
 class ModuleHost(
     val service: AccessibilityService,
     val scope: CoroutineScope,
-)
+) {
+    val activationScreenshot = ActivationScreenshot()
+}

@@ -2,9 +2,8 @@ package com.bo0sted.powerplusplus.panel
 
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
-import android.os.SystemClock
+import android.graphics.Bitmap
 import android.util.Log
-import android.view.Choreographer
 import android.view.Display
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,7 +42,9 @@ class PanelController @Inject constructor(
         repository.config.stateIn(scope, SharingStarted.Eagerly, PanelConfig())
 
     private var window: OverlayWindow? = null
-    private var opening = false
+
+    /** True while the activation screenshot is being taken and the panel isn't added yet. */
+    private var capturing = false
 
     enum class ShowResult { Shown, SystemPowerMenu, ServiceUnavailable }
 
@@ -55,59 +56,57 @@ class PanelController @Inject constructor(
      * uses, so the system decides what the lock-screen menu offers. `isKeyguardLocked` is true
      * whenever the lock screen is showing, including a swipe-only one and one occluded by another
      * activity (e.g. a call).
+     *
+     * If the panel holds a module that uses the activation screenshot, the screen is captured first
+     * and the panel is added only once the capture is back (measured at 9–32 ms on a Pixel 9 Pro XL).
+     * Nothing of ours is on screen during the capture and the app underneath still has focus, so
+     * apps that hide their content on focus loss are captured as the user saw them.
      */
-    fun show(invocationElapsedMs: Long? = null): ShowResult {
-        if (window?.isShowing == true || opening) return ShowResult.Shown
+    fun show(): ShowResult {
+        if (window?.isShowing == true || capturing) return ShowResult.Shown
         val host = hostProvider.host.value ?: return ShowResult.ServiceUnavailable
         if (host.service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             host.service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG)
             return ShowResult.SystemPowerMenu
         }
-        // TIMING EXPERIMENT (2026-10-08): capture the screen before the panel exists, then show the
-        // panel, and log how long each step takes. Not the final design; see AGENTS.md §3.5.
-        opening = true
-        val onShowAt = SystemClock.elapsedRealtime()
+        host.activationScreenshot.replace(null)
+        if (!panelUsesActivationScreenshot()) {
+            addPanel(host)
+            return ShowResult.Shown
+        }
+
+        capturing = true
         host.service.takeScreenshot(
             Display.DEFAULT_DISPLAY,
             host.service.mainExecutor,
             object : AccessibilityService.TakeScreenshotCallback {
                 override fun onSuccess(screenshot: AccessibilityService.ScreenshotResult) {
-                    val capturedAt = SystemClock.elapsedRealtime()
-                    val buffer = screenshot.hardwareBuffer
-                    val size = "${buffer.width}x${buffer.height}"
-                    buffer.close()
-                    if (!opening) return
+                    // The bitmap keeps its own reference to the buffer, so ours can be closed now.
+                    val bitmap = screenshot.hardwareBuffer.use { Bitmap.wrapHardwareBuffer(it, screenshot.colorSpace) }
+                    if (!capturing) {
+                        bitmap?.recycle() // Dismissed (e.g. screen off) while capturing.
+                        return
+                    }
+                    host.activationScreenshot.replace(bitmap)
                     addPanel(host)
-                    logTiming(invocationElapsedMs, onShowAt, capturedAt, "ok $size")
                 }
 
                 override fun onFailure(errorCode: Int) {
-                    val capturedAt = SystemClock.elapsedRealtime()
-                    if (!opening) return
-                    addPanel(host)
-                    logTiming(invocationElapsedMs, onShowAt, capturedAt, "failed code=$errorCode")
+                    Log.w(TAG, "Activation screenshot failed: $errorCode")
+                    if (capturing) addPanel(host)
                 }
             },
         )
         return ShowResult.Shown
     }
 
-    private fun logTiming(invocationElapsedMs: Long?, onShowAt: Long, capturedAt: Long, outcome: String) {
-        val addedAt = SystemClock.elapsedRealtime()
-        Choreographer.getInstance().postFrameCallback {
-            val frameAt = SystemClock.elapsedRealtime()
-            val pressToSession = invocationElapsedMs?.let { "${onShowAt - it}" } ?: "?"
-            Log.i(
-                TIMING_TAG,
-                "power→session=${pressToSession}ms session→screenshot=${capturedAt - onShowAt}ms ($outcome) " +
-                    "screenshot→panelAdded=${addedAt - capturedAt}ms panelAdded→firstFrame=${frameAt - addedAt}ms " +
-                    "total=${invocationElapsedMs?.let { frameAt - it } ?: "?"}ms",
-            )
+    private fun panelUsesActivationScreenshot(): Boolean =
+        config.value.pages.any { page ->
+            page.slots.any { it.enabled && registry[it.typeId]?.usesActivationScreenshot == true }
         }
-    }
 
     private fun addPanel(host: ModuleHost) {
-        opening = false
+        capturing = false
         val density = host.service.resources.displayMetrics.density
         val backdrop = when (config.value.backdrop) {
             Backdrop.Blur -> OverlayBackdrop.Blur(radiusPx = (BLUR_RADIUS_DP * density).roundToInt())
@@ -124,7 +123,7 @@ class PanelController @Inject constructor(
                     registry = registry,
                     host = host,
                     onAction = { module ->
-                        dismiss()
+                        dismiss(keepScreenshot = module.usesActivationScreenshot)
                         host.scope.launch { module.run(host) }
                     },
                     onToggle = { module: ToggleModule, on -> host.scope.launch { module.setOn(host, on) } },
@@ -134,14 +133,19 @@ class PanelController @Inject constructor(
         }
     }
 
-    fun dismiss() {
-        opening = false
+    /**
+     * Closes the panel. The activation screenshot is discarded unless [keepScreenshot] is set, which
+     * is only done when handing over to a module that takes it.
+     */
+    fun dismiss(keepScreenshot: Boolean = false) {
+        capturing = false
         window?.dismiss()
         window = null
+        if (!keepScreenshot) hostProvider.host.value?.activationScreenshot?.replace(null)
     }
 
     private companion object {
+        const val TAG = "PowerPP.Panel"
         const val BLUR_RADIUS_DP = 24
-        const val TIMING_TAG = "PowerPP.Timing"
     }
 }

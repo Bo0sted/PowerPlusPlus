@@ -7,8 +7,9 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 - **Current phase:** the core framework is built and compiles, and lint is clean (§5, §10). The Power menu module exists. **Nothing has run on a device yet.**
 - **Next action:**
   1. Install on the Pixel and smoke-test: the setup flow, power long-press → panel, blur/dim, Back, page swiping, the editor, and the Power menu module.
-  2. ~~The text-pick UI and Screen text (§3.2)~~: done; it needs the user's on-device test.
-  3. Then Smart screenshot (§3.4), then OCR (§3.3, §4).
+  2. ~~The text-pick UI and Screen text (§3.2)~~: done, and the user confirmed it works.
+  3. Smart screenshot step 1 + activation capture: built; **awaiting the user's on-device test**. The first check is whether a capture of the user's banking app shows its real content.
+  4. Then the Smart screenshot step-2 editor, then OCR (§3.3, §4).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
 - **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. No XGesture code is copied verbatim; where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
@@ -88,15 +89,45 @@ A separate module from 3.2. The flow:
 4. The results show as **clickable boxes**, the same as accessibility text search.
 
 ### 3.4 Smart screenshot
+- **Step 1 is implemented** as `:module:screenshot` (typeId `smart_screenshot`, `usesActivationScreenshot = true`). **Step 2 (the editor) is not built yet.**
+- **Flow:**
+  1. The module `take()`s the activation screenshot (toast "Couldn't capture the screen" if there is none).
+  2. It makes a software ARGB copy (`Dispatchers.Default`).
+  3. `looksBlocked` (a 48×48 sample grid over the middle 80 % of the height, all near-black) → toast "This app blocks screenshots".
+  4. Otherwise it shows `SelectScreen` in a focusable `OverlayWindow`.
+- **`SelectScreen`** (XGesture-like):
+  - the frozen image with everything outside the selection darkened (58 %), the accent frame, handles and a centre crosshair
+  - drag inside to move, drag a handle to resize (32 dp hit slop), tap outside to cancel
+  - a floating shape toolbar above the selection (Rectangle · Circle · Full-width strip · Full-height strip) and an action toolbar below it (**Copy · Save · Share**); both hide while dragging and stay inside the safe-drawing insets
+- **`SelectionGeometry`** (pure, unit-tested):
+  - defaults: rectangle 60 % × 35 % of the screen, circle 60 % of the short side, horizontal strip 20 % of the height, vertical strip 40 % of the width
+  - 48 dp minimum
+  - strips move only across their axis and have edge handles only; the circle stays square, anchored at the opposite corner
+  - `reshape` converts between shapes, keeping the position
+- **Crop:** the circle uses an antialiased oval clip on a transparent ARGB bitmap (transparent corners, decided by the user).
+- **`ScreenshotOutput`:**
+  - **Copy/Share** write a PNG to `cacheDir/screenshots/`, served by the module's own FileProvider (`${applicationId}.screenshots`), and keep only the 5 newest files.
+  - **Save** writes to `Pictures/Power++` via MediaStore (`IS_PENDING`; no permission needed).
+  - The Share chooser is started *before* the overlay closes. While our accessibility overlay is visible, `BackgroundActivityStartController` allows the start (`BAL_ALLOW_NON_APP_VISIBLE_WINDOW`; `WindowState` counts system-type windows ≥ `FIRST_SYSTEM_WINDOW` as non-app visible windows).
+- **Step 2 plan:** a normal full-screen **Activity**, not an overlay. Accessibility overlays sit above the IME, so typing for the Text tool needs an app window; an activity also gives normal Back.
+  - Tools: pen, arrow, rectangle, oval, text, blur, pixelate (brush **and** rectangle modes), colour/width, undo/redo; Copy · Save · Share.
+  - Blur/pixelate strength and brush size sliders, persisted.
+  - Reached from an "Edit" button to be added to step 1's action toolbar.
 - Based on XGesture's smart screenshot, especially **Copy**: the image goes to the clipboard without being saved to the gallery.
   - How it works: the PNG is written to the app-private `cacheDir/screenshots/`, exposed via `FileProvider`, and the clipboard gets `ClipData.newUri`. Android's clipboard can't hold raw bitmap bytes. XGesture does exactly this (`ScreenshotStorage.kt`); the user had doubted it, and the code confirmed it.
   - Improvement over XGesture, which never deletes these files: prune old clipboard images automatically.
 - **Editor tools (v1):** pen (color and width), blur, pixelate, undo/redo, crop, arrows, shapes, text.
+- **Blur and pixelate strength** (user, 2026-10-08): each has a **slider** with a very wide range, from very light to very, very strong. The chosen values are **persisted** and restored next time.
+- **Blur/pixelate brush size** (user, 2026-10-08): a size slider with a live preview of the brush size while adjusting, persisted. **Decided (user): both** — a brush mode (painted, sized by the slider) and a rectangle mode (dragged).
 - **Capture method:** `AccessibilityService.takeScreenshot` (API 30+). It needs no MediaProjection consent prompt. Hide the overlay before capture. Secure (FLAG_SECURE) windows capture as black.
 
 ### 3.5 Activation screenshot (proposed by the user 2026-10-08; design agreed in principle, details pending §7)
 - **Problem:** some apps (the user's banking apps) hide their content as soon as Power++ activates. A system screenshot taken earlier still captures the real content, because the app only hides *after* the system's screenshot notification.
-- **Proposal:** capture the screen at activation, before the panel overlay is added, and hand that bitmap to Smart screenshot and OCR text search. It's discarded when the panel closes unless one of those modules took it. Screen text can't use it, since it reads the live node tree.
+- **Implemented** in `PanelController.show()`:
+  - If any enabled slot's module has `usesActivationScreenshot`, call `takeScreenshot` → `Bitmap.wrapHardwareBuffer` (closing the buffer right away is safe, because the bitmap keeps its own reference) → `host.activationScreenshot.replace(bitmap)` → add the panel. On failure the panel opens anyway.
+  - `dismiss(keepScreenshot = module.usesActivationScreenshot)` hands it over on a module tap; every other dismissal discards it.
+  - The timing experiment code has been removed.
+- **Proposal (original):** capture the screen at activation, before the panel overlay is added, and hand that bitmap to Smart screenshot and OCR text search. It's discarded when the panel closes unless one of those modules took it. Screen text can't use it, since it reads the live node tree.
 - **Verified facts** (AOSP `main`):
   - `AccessibilityService.takeScreenshot` → `WindowManagerService.captureDisplay(displayId, null, …)`. The default `CaptureArgs` has `captureSecureLayers = false`, so **`FLAG_SECURE` windows are always black**; no third-party method can avoid that.
   - It does **not** notify the app's `Activity.ScreenCaptureCallback` (Android 14 screenshot detection). That's fired only via `IWindowManager.notifyScreenshotListeners`, which "should be invoked only by SysUI" (the user's hardware-key screenshots).
@@ -173,11 +204,11 @@ A separate module from 3.2. The flow:
 |---|---|
 | `build-logic` | Included build with the convention plugins: `powerpp.android.application`, `powerpp.android.library`, `powerpp.android.compose`, `powerpp.hilt`, `powerpp.serialization`, `powerpp.panel.module`. Modules apply plugins **only** through these; AGP, KSP and the rest are on build-logic's classpath, not resolvable by id directly. |
 | `:core:ui` | `PowerTheme` |
-| `:core:module` | The module SPI: `PanelModule` (sealed), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService` plus a scope tied to the connection), `ModuleRegistry` |
+| `:core:module` | The module SPI: `PanelModule` (sealed; `usesActivationScreenshot` defaults to false), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService`, a scope tied to the connection, and `activationScreenshot`), `ActivationScreenshot` (single-owner holder: `take()` hands the bitmap over and the caller must recycle it; `replace()` recycles the old one), `ModuleRegistry` |
 | `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. |
 | `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing). Single use: create a new one each time. |
 | `:core:textpick` | Shared text-selection overlay, used by Screen text and (later) OCR. `TextBlock(text, IntRect screen px)`; `normalizeTextBlocks` drops container summaries (blocks enclosing a smaller block), blanks and duplicates, and sorts in reading order. `hitTest` picks the smallest block under the tap, with 10dp slop. `TextPickScreen` + `showTextPick(service, blocks)`. All of this is unit-tested. |
-| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`. |
+| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`. |
 | `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`), and the settings UI (`settings/`: setup checklist, layout editor, appearance). |
 
 ### Adding a module type

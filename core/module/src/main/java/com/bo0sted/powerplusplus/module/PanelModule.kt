@@ -19,6 +19,13 @@ sealed interface PanelModule {
     val title: Int
 
     val icon: ImageVector
+
+    /**
+     * Whether this module works on [ModuleHost.activationScreenshot]. When any enabled module on the
+     * panel says yes, the screen is captured at activation, before the panel appears, so apps that
+     * hide their content once they lose focus are captured as the user saw them.
+     */
+    val usesActivationScreenshot: Boolean get() = false
 }
 
 /** A module that performs an action when tapped. The panel is dismissed before [run] is called. */
