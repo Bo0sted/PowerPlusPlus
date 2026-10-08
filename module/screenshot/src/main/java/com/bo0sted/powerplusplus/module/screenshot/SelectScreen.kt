@@ -25,6 +25,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -160,6 +162,11 @@ internal fun SelectScreen(
                 ShapeButton(SelectionShape.HorizontalStrip, Icons.Rounded.Crop169, R.string.screenshot_shape_horizontal, shape) { shape = it; selection = geometry.default(it) }
                 ShapeButton(SelectionShape.VerticalStrip, Icons.Rounded.CropPortrait, R.string.screenshot_shape_vertical, shape) { shape = it; selection = geometry.default(it) }
             }
+            // Directly under the shape toolbar.
+            FloatingToolbar(anchor = onScreen, area = area, above = true, stackIndex = 1) {
+                TextButton(onClick = { selection = geometry.max(shape, selection) }) { Text(stringResource(R.string.screenshot_size_max)) }
+                TextButton(onClick = { selection = geometry.default(shape) }) { Text(stringResource(R.string.screenshot_size_default)) }
+            }
             FloatingToolbar(anchor = onScreen, area = area, above = false) {
                 ActionButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onAction(ScreenshotAction.Copy, selection, shape) }
                 ActionButton(Icons.Rounded.Save, R.string.screenshot_save) { onAction(ScreenshotAction.Save, selection, shape) }
@@ -176,15 +183,22 @@ private fun contains(selection: Rect, shape: SelectionShape, point: Offset): Boo
     return (point - selection.center).getDistance() <= selection.width / 2
 }
 
-/** A toolbar centered on [anchor], just above or below it, kept inside [area]. */
+/**
+ * A toolbar centered on [anchor], just above or below it, kept inside [area]. Above the anchor,
+ * [stackIndex] 0 is the top toolbar and 1 sits directly under it (both still above the anchor).
+ */
 @Composable
-private fun FloatingToolbar(anchor: Rect, area: Rect, above: Boolean, content: @Composable () -> Unit) {
+private fun FloatingToolbar(anchor: Rect, area: Rect, above: Boolean, stackIndex: Int = 0, content: @Composable () -> Unit) {
     var size by remember { mutableStateOf(Zero) }
     val gap = with(LocalDensity.current) { 14.dp.toPx() }
+    val rowStep = with(LocalDensity.current) { (TOOLBAR_HEIGHT + 8.dp).toPx() }
     val measured = size.toSize()
     val x = (anchor.center.x - measured.width / 2).coerceIn(area.left, (area.right - measured.width).coerceAtLeast(area.left))
-    val preferredY = if (above) anchor.top - measured.height - gap else anchor.bottom + gap
-    val y = preferredY.coerceIn(area.top, (area.bottom - measured.height).coerceAtLeast(area.top))
+    // Rows above the anchor stack upward: the last row (highest index) is closest to the anchor.
+    val rowsAbove = if (above) (ABOVE_ROWS - 1 - stackIndex) else 0
+    val preferredY = if (above) anchor.top - measured.height - gap - rowsAbove * rowStep else anchor.bottom + gap
+    val minY = if (above) area.top + stackIndex * rowStep else area.top
+    val y = preferredY.coerceIn(minY, (area.bottom - measured.height).coerceAtLeast(minY))
     Surface(
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -214,3 +228,6 @@ private fun ShapeButton(
 private fun ActionButton(icon: ImageVector, label: Int, onClick: () -> Unit) {
     IconButton(onClick = onClick) { Icon(icon, contentDescription = stringResource(label)) }
 }
+
+private val TOOLBAR_HEIGHT = 48.dp
+private const val ABOVE_ROWS = 2

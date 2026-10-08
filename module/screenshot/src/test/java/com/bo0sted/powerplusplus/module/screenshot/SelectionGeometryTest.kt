@@ -41,6 +41,17 @@ class SelectionGeometryTest {
     }
 
     @Test
+    fun maxFillsTheImageAndTheCircleIsTheLargestThatFits() {
+        val anywhere = Rect(10f, 10f, 20f, 20f)
+        SelectionShape.entries.filter { it != SelectionShape.Circle }.forEach { shape ->
+            assertEquals(Rect(0f, 0f, 1000f, 2000f), geometry.max(shape, anywhere))
+        }
+        // Largest circle: the image's short side, centred on the selection but kept inside.
+        assertEquals(Rect(0f, 500f, 1000f, 1500f), geometry.max(SelectionShape.Circle, Rect(400f, 900f, 600f, 1100f)))
+        assertEquals(Rect(0f, 0f, 1000f, 1000f), geometry.max(SelectionShape.Circle, Rect(0f, 0f, 100f, 100f)))
+    }
+
+    @Test
     fun movingIsClampedToTheImage() {
         val rect = Rect(100f, 100f, 300f, 300f)
         assertEquals(Rect(0f, 0f, 200f, 200f), geometry.move(rect, Offset(-500f, -500f), SelectionShape.Rectangle))

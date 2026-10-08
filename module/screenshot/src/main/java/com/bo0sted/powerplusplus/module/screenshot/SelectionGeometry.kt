@@ -35,6 +35,16 @@ class SelectionGeometry(private val bounds: Size, private val minSize: Float) {
         SelectionShape.VerticalStrip -> centered(bounds.width * 0.4f, bounds.height)
     }
 
+    /**
+     * The largest selection of [shape]: the whole image for a rectangle or strip; for a circle, the
+     * largest one that fits, centred on [current] but kept inside the image.
+     */
+    fun max(shape: SelectionShape, current: Rect): Rect {
+        if (shape != SelectionShape.Circle) return Rect(Offset.Zero, bounds)
+        val side = min(bounds.width, bounds.height)
+        return placeInside(Rect(Offset(current.center.x - side / 2, current.center.y - side / 2), Size(side, side)))
+    }
+
     fun handles(shape: SelectionShape): List<Handle> = when (shape) {
         SelectionShape.Rectangle, SelectionShape.Circle ->
             listOf(Handle.TopLeft, Handle.TopRight, Handle.BottomLeft, Handle.BottomRight)

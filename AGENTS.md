@@ -9,7 +9,9 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   1. Install on the Pixel and smoke-test: the setup flow, power long-press → panel, blur/dim, Back, page swiping, the editor, and the Power menu module.
   2. ~~The text-pick UI and Screen text (§3.2)~~: done, and the user confirmed it works.
   3. ~~Smart screenshot step 1 + activation capture~~: the user confirmed it works on-device. The banking app is captured with its real content, and Copy and Save work.
-  4. Smart screenshot step-2 editor: built; **awaiting the user's on-device test**.
+  4. Smart screenshot step-2 editor: built.
+     - The user found: missing top-bar buttons, stroke lag, and no editable text. All fixed 2026-10-08, **awaiting re-test**.
+     - Max/Default is also awaiting test.
   5. Then OCR (§3.3, §4).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
@@ -105,6 +107,9 @@ A separate module from 3.2. The flow:
   - 48 dp minimum
   - strips move only across their axis and have edge handles only; the circle stays square, anchored at the opposite corner
   - **Switching shape always resets to that shape's default** (the user's rule, 2026-10-08). Carrying the previous size over maxed out an edge when switching to or from a strip.
+  - **Max / Default** buttons (user, 2026-10-08) sit in a row directly under the shape toolbar.
+    - `max()`: the whole image for a rectangle or strip; for a circle, the largest that fits (the short side), centred on the current selection and kept inside.
+    - Default = `default(shape)`.
 - **Crop:** the circle uses an antialiased oval clip on a transparent ARGB bitmap (transparent corners, decided by the user).
 - **`ScreenshotOutput`:**
   - **Copy/Share** write a PNG to `cacheDir/screenshots/`, served by the module's own FileProvider (`${applicationId}.screenshots`), and keep only the 5 newest files.
@@ -115,7 +120,8 @@ A separate module from 3.2. The flow:
   - **Why an Activity, not an overlay:** accessibility overlays sit above the IME, and the Text tool needs the keyboard; an activity also gets normal Back. It's declared in the module manifest with `excludeFromRecents`, `taskAffinity=""` and `Theme.Material.NoActionBar`.
 - **Editor model** (pure, unit-tested):
   - `Mark` (`Pen`, `Arrow`, `Box`, `Ellipse`, `Label`, `Effect(kind, strength, area)`), with `EffectArea` = `Brush(points, diameter)` | `Box(rect)`. All coordinates are image pixels.
-  - `EditHistory`: undo/redo; adding a mark clears redo.
+  - `EditHistory`: snapshot-based undo/redo (`commit`, `add`, `updateLabel`, `removeLabel`). Every edit, including moving, recolouring or deleting text, is one undo step; an unchanged commit isn't a step.
+  - `Mark.Label` has an `id`, and `background` (a solid box in the label's colour, with the text in black or white by luminance).
 - **`EditorViewModel`** holds the image, history and processed effect images, so a rotation doesn't lose work. It recycles everything in `onCleared`.
 - **Rendering:** `DrawScope.drawEdits` draws the image and marks. It's used on screen (inside a fit-to-view scale transform) **and** for export (`CanvasDrawScope` on an `ImageBitmap` at 1:1, `Density(1f)`), so the output matches the screen exactly.
   - Text sizes are stored in image pixels and converted to sp via the scope's density.
@@ -129,8 +135,24 @@ A separate module from 3.2. The flow:
   - colour (8-swatch palette), stroke width dp (1–24), text size dp (12–96), brush size dp (8–160), blur and pixelate strength (0–1), effect area mode (Brush or Rectangle)
   - Sliders save on release (`onValueChangeFinished`), not on every frame.
   - The brush-size slider shows a preview circle at the brush's real on-screen size while held.
+- **Two drawing layers** (user-reported lag, 2026-10-08):
+  - The image plus finished marks are a `Canvas` with `graphicsLayer { compositingStrategy = Offscreen }`, redrawn only when marks or effects change.
+  - A live `Canvas` on top draws only the in-progress mark, a label being dragged (hidden from the cached layer via a separate `hiddenLabelId` state, so the cached layer isn't invalidated every frame) and the selection outline.
+  - In-progress blur and pixelate draw a translucent placeholder until the processed image is ready.
+  - Strokes use `change.historical` samples.
+- **⚠️ Pitfall that caused the "0.5 s lag":**
+  - **Never put a still-mutating collection into Compose state.** Pen/brush marks were first built with the live `MutableList` of points, which then grew in place. Every new `toList()` copy compared *equal* to the stored value, so `mutableStateOf`'s structural-equality policy dropped the write and nothing redrew.
+  - Measured on-device: 1 redraw for a 707-sample stroke; the editor window rendered 4 frames in 8 s.
+  - Only point-collecting tools were affected.
+  - Fix: always pass `points.toList()`.
+  - Diagnostics that found it: `dumpsys gfxinfo <pkg> framestats` (frames per window) plus a temporary redraw counter in the draw lambda.
+- **Text:**
+  - The Text tool places a label on tap (not on drag) and selects it.
+  - With **any** tool, pressing a label selects it, and dragging moves it.
+  - While selected, the bottom panel shows `LabelOptions`: palette, size slider, **Background** switch, Edit text (prefilled dialog), Delete.
+  - Tapping elsewhere or switching tool deselects.
 - **Editor UI:**
-  - top bar: Close · Undo · Redo · **Copy · Save · Share** (each renders, outputs, then closes the editor)
+  - top bar: Close · Undo · Redo · **Copy · Save · Share** (each renders, outputs, then closes the editor). The whole screen sits in a `Surface(contentColor = White)`; without it the top-bar icons defaulted to black on black and looked missing.
   - bottom: tool options above the tool row (Pen · Arrow · Rectangle · Oval · Text · Blur · Pixelate)
   - Text: tap the image → a dialog with a text field → the label is placed at the tap point
 

@@ -13,7 +13,19 @@ sealed interface Mark {
 
     data class Ellipse(val rect: Rect, val color: Int, val width: Float) : Mark
 
-    data class Label(val position: Offset, val text: String, val color: Int, val size: Float) : Mark
+    /**
+     * Text placed at [position] (top-left). [id] identifies it for selection, moving and editing.
+     * With [background], a solid box in [color] sits behind the text, which is then drawn in black
+     * or white, whichever contrasts more.
+     */
+    data class Label(
+        val id: Long,
+        val position: Offset,
+        val text: String,
+        val color: Int,
+        val size: Float,
+        val background: Boolean = false,
+    ) : Mark
 
     /** Shows the blurred or pixelated image (per [kind] and [strength], 0..1) inside [area]. */
     data class Effect(val kind: EffectKind, val strength: Float, val area: EffectArea) : Mark
@@ -27,17 +39,31 @@ sealed interface EffectArea {
     data class Box(val rect: Rect) : EffectArea
 }
 
-/** The marks in drawing order, with undo and redo. Immutable: every edit returns a new history. */
-data class EditHistory(val marks: List<Mark> = emptyList(), private val undone: List<Mark> = emptyList()) {
-    val canUndo: Boolean get() = marks.isNotEmpty()
-    val canRedo: Boolean get() = undone.isNotEmpty()
+/**
+ * The marks in drawing order, with undo and redo. Every edit — adding, moving, recolouring or
+ * deleting — is a new snapshot, so all of them can be undone. Immutable.
+ */
+data class EditHistory(
+    val marks: List<Mark> = emptyList(),
+    private val past: List<List<Mark>> = emptyList(),
+    private val future: List<List<Mark>> = emptyList(),
+) {
+    val canUndo: Boolean get() = past.isNotEmpty()
+    val canRedo: Boolean get() = future.isNotEmpty()
 
-    /** Adds a mark; this clears what could be redone, as in every editor. */
-    fun add(mark: Mark) = EditHistory(marks + mark, emptyList())
+    /** Records [next] as the current marks; this clears what could be redone. No-op if unchanged. */
+    fun commit(next: List<Mark>) = if (next == marks) this else EditHistory(next, past + listOf(marks), emptyList())
 
-    fun undo() = if (canUndo) EditHistory(marks.dropLast(1), undone + marks.last()) else this
+    fun add(mark: Mark) = commit(marks + mark)
 
-    fun redo() = if (canRedo) EditHistory(marks + undone.last(), undone.dropLast(1)) else this
+    fun updateLabel(id: Long, transform: (Mark.Label) -> Mark.Label) =
+        commit(marks.map { if (it is Mark.Label && it.id == id) transform(it) else it })
+
+    fun removeLabel(id: Long) = commit(marks.filterNot { it is Mark.Label && it.id == id })
+
+    fun undo() = if (canUndo) EditHistory(past.last(), past.dropLast(1), future + listOf(marks)) else this
+
+    fun redo() = if (canRedo) EditHistory(future.last(), past + listOf(marks), future.dropLast(1)) else this
 }
 
 /** A rectangle spanning two points dragged in any direction. */

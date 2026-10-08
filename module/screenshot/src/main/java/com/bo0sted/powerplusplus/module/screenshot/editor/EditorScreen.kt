@@ -50,6 +50,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -65,6 +66,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -88,9 +91,20 @@ private val PALETTE = listOf(
     0xFFF44336, 0xFFFF9800, 0xFFFFEB3B, 0xFF4CAF50, 0xFF2196F3, 0xFF9C27B0, 0xFFFFFFFF, 0xFF000000,
 ).map { it.toInt() }
 
+/** What the text dialog is for: a new label at a point, or editing an existing label's text. */
+private sealed interface TextDialog {
+    data class New(val position: Offset) : TextDialog
+    data class Edit(val id: Long, val text: String) : TextDialog
+}
+
 /**
  * Step 2 of Smart screenshot: annotate the cropped image. Top bar: Close, Undo, Redo, Copy, Save,
- * Share. Bottom: options for the current tool above the tool row.
+ * Share. Bottom: options for the current tool (or the selected text) above the tool row.
+ *
+ * Drawing is split into two layers so a stroke in progress never redraws everything else: the
+ * image and finished marks render into a cached offscreen layer that is only redrawn when they
+ * change, and the live layer on top draws just the mark being drawn, the label being moved and the
+ * selection outline.
  */
 @Composable
 internal fun EditorScreen(
@@ -102,11 +116,19 @@ internal fun EditorScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var tool by remember { mutableStateOf(EditorTool.Pen) }
     var drawing by remember { mutableStateOf<Mark?>(null) }
-    var pendingLabel by remember { mutableStateOf<Offset?>(null) }
+    var selectedLabelId by remember { mutableStateOf<Long?>(null) }
+    var movingLabel by remember { mutableStateOf<Mark.Label?>(null) }
+    // Which label the cached layer leaves out while it's being dragged. Separate from movingLabel,
+    // which changes every frame, so the cached layer is redrawn only when a drag starts and ends.
+    var hiddenLabelId by remember { mutableStateOf<Long?>(null) }
+    var textDialog by remember { mutableStateOf<TextDialog?>(null) }
     var brushPreview by remember { mutableStateOf(false) }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     val textMeasurer = rememberTextMeasurer()
-    val density = LocalDensity.current.density
+    val densityScope = LocalDensity.current
+    val density = densityScope.density
+    val marks = viewModel.history.marks
+    val selectedLabel = marks.firstOrNull { it is Mark.Label && it.id == selectedLabelId } as Mark.Label?
 
     // The image is fitted into the view; these convert between view and image pixels.
     val scale = if (viewSize == IntSize.Zero) 1f else min(viewSize.width.toFloat() / image.width, viewSize.height.toFloat() / image.height)
@@ -122,87 +144,179 @@ internal fun EditorScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            BarButton(Icons.Rounded.Close, R.string.editor_close, onClick = onClose)
-            Spacer(Modifier.weight(1f))
-            BarButton(Icons.AutoMirrored.Rounded.Undo, R.string.editor_undo, enabled = viewModel.history.canUndo) { viewModel.undo() }
-            BarButton(Icons.AutoMirrored.Rounded.Redo, R.string.editor_redo, enabled = viewModel.history.canRedo) { viewModel.redo() }
-            BarButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onOutput(EditorOutput.Copy) }
-            BarButton(Icons.Rounded.Save, R.string.screenshot_save) { onOutput(EditorOutput.Save) }
-            BarButton(Icons.Rounded.Share, R.string.screenshot_share) { onOutput(EditorOutput.Share) }
-        }
+    // A Surface supplies the content colour; without it the top bar's icons were black on black.
+    Surface(color = Color.Black, contentColor = Color.White) {
+        Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                BarButton(Icons.Rounded.Close, R.string.editor_close, onClick = onClose)
+                Spacer(Modifier.weight(1f))
+                BarButton(Icons.AutoMirrored.Rounded.Undo, R.string.editor_undo, enabled = viewModel.history.canUndo) { viewModel.undo() }
+                BarButton(Icons.AutoMirrored.Rounded.Redo, R.string.editor_redo, enabled = viewModel.history.canRedo) { viewModel.redo() }
+                BarButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onOutput(EditorOutput.Copy) }
+                BarButton(Icons.Rounded.Save, R.string.screenshot_save) { onOutput(EditorOutput.Save) }
+                BarButton(Icons.Rounded.Share, R.string.screenshot_share) { onOutput(EditorOutput.Share) }
+            }
 
-        Canvas(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .onSizeChanged { viewSize = it }
-                .pointerInput(tool, scale, origin, settings) {
-                    fun toImage(point: Offset) = (point - origin) / scale
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        val start = toImage(down.position)
-                        if (tool == EditorTool.Text) {
-                            pendingLabel = start
-                            return@awaitEachGesture
+            Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { viewSize = it }) {
+                // Finished marks: cached offscreen, redrawn only when the marks or effects change.
+                Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
+                    val hidden = hiddenLabelId
+                    withTransform({
+                        translate(origin.x, origin.y)
+                        scale(scale, scale, pivot = Offset.Zero)
+                    }) {
+                        drawImage(image)
+                        marks.forEach { mark ->
+                            if (!(mark is Mark.Label && mark.id == hidden)) drawMark(mark, viewModel.effects, textMeasurer, image)
                         }
-                        val points = mutableListOf(start)
-                        drawing = buildMark(tool, start, start, points, settings, imagePxPerDp)
-                        do {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (change.positionChange() != Offset.Zero) {
-                                val current = toImage(change.position)
-                                points += current
-                                drawing = buildMark(tool, start, current, points.toList(), settings, imagePxPerDp)
-                            }
-                            change.consume()
-                        } while (change.pressed)
-                        drawing?.takeIf { it.isMeaningful() }?.let(viewModel::add)
-                        drawing = null
                     }
-                },
-        ) {
-            withTransform({
-                translate(origin.x, origin.y)
-                scale(scale, scale, pivot = Offset.Zero)
-            }) {
-                drawEdits(image, viewModel.history.marks + listOfNotNull(drawing), viewModel.effects, textMeasurer)
-            }
-            if (brushPreview) {
-                // Shown at the brush's real on-screen size while its slider is being dragged.
-                val radius = settings.brushDp * density / 2
-                drawCircle(Color.White.copy(alpha = 0.25f), radius, center)
-                drawCircle(Color.White, radius, center, style = Stroke(2.dp.toPx()))
-            }
-        }
+                }
+                // Live layer: what is being drawn or moved right now, plus the selection outline.
+                Canvas(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer()
+                        .pointerInput(tool, scale, origin, settings, marks) {
+                            fun toImage(point: Offset) = (point - origin) / scale
+                            val slop = viewConfiguration.touchSlop / scale
+                            awaitEachGesture {
+                                val down = awaitFirstDown()
+                                val start = toImage(down.position)
 
-        Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                ToolOptions(tool, settings, viewModel::updateSettings, onBrushPreview = { brushPreview = it })
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                val hit = marks.asReversed().filterIsInstance<Mark.Label>()
+                                    .firstOrNull { labelBounds(measureLabel(textMeasurer, it, densityScope), it).contains(start) }
+                                if (hit != null) {
+                                    // Pressing a label selects it; dragging moves it.
+                                    selectedLabelId = hit.id
+                                    var moved = false
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                        val delta = toImage(change.position) - start
+                                        if (moved || delta.getDistance() > slop) {
+                                            moved = true
+                                            hiddenLabelId = hit.id
+                                            movingLabel = hit.copy(position = hit.position + delta)
+                                        }
+                                        change.consume()
+                                    } while (change.pressed)
+                                    movingLabel?.let { final -> viewModel.updateLabel(hit.id) { it.copy(position = final.position) } }
+                                    movingLabel = null
+                                    hiddenLabelId = null
+                                    return@awaitEachGesture
+                                }
+
+                                selectedLabelId = null
+                                if (tool == EditorTool.Text) {
+                                    var travelled = 0f
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                        travelled = maxOf(travelled, (toImage(change.position) - start).getDistance())
+                                        change.consume()
+                                    } while (change.pressed)
+                                    if (travelled <= slop) textDialog = TextDialog.New(start)
+                                    return@awaitEachGesture
+                                }
+
+                                // Marks always get an immutable copy of the points. Handing the mutable list
+                                // to the state would let it change in place, after which every new copy
+                                // compares equal and Compose skips the redraw (measured: 1 redraw for a
+                                // 707-sample stroke).
+                                val points = mutableListOf(start)
+                                drawing = buildMark(tool, start, start, points.toList(), settings, imagePxPerDp)
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    // Every sample since the last frame, not just the latest, for smooth strokes.
+                                    change.historical.forEach { points += toImage(it.position) }
+                                    if (change.positionChange() != Offset.Zero) {
+                                        val current = toImage(change.position)
+                                        points += current
+                                        drawing = buildMark(tool, start, current, points.toList(), settings, imagePxPerDp)
+                                    }
+                                    change.consume()
+                                } while (change.pressed)
+                                drawing?.takeIf { it.isMeaningful() }?.let(viewModel::add)
+                                drawing = null
+                            }
+                        },
                 ) {
-                    ToolButton(EditorTool.Pen, Icons.Rounded.Draw, R.string.editor_tool_pen, tool) { tool = it }
-                    ToolButton(EditorTool.Arrow, Icons.Rounded.NorthEast, R.string.editor_tool_arrow, tool) { tool = it }
-                    ToolButton(EditorTool.Box, Icons.Rounded.CropSquare, R.string.editor_tool_rectangle, tool) { tool = it }
-                    ToolButton(EditorTool.Ellipse, Icons.Outlined.Circle, R.string.editor_tool_oval, tool) { tool = it }
-                    ToolButton(EditorTool.Text, Icons.Rounded.TextFields, R.string.editor_tool_text, tool) { tool = it }
-                    ToolButton(EditorTool.Blur, Icons.Rounded.BlurOn, R.string.editor_tool_blur, tool) { tool = it }
-                    ToolButton(EditorTool.Pixelate, Icons.Rounded.GridOn, R.string.editor_tool_pixelate, tool) { tool = it }
+                    withTransform({
+                        translate(origin.x, origin.y)
+                        scale(scale, scale, pivot = Offset.Zero)
+                    }) {
+                        drawing?.let { drawMark(it, viewModel.effects, textMeasurer, image, placeholderWhilePending = true) }
+                        movingLabel?.let { drawMark(it, viewModel.effects, textMeasurer, image) }
+                        (movingLabel ?: selectedLabel)?.let { label ->
+                            val bounds = labelBounds(measureLabel(textMeasurer, label, this), label).inflate(4.dp.toPx() / scale)
+                            drawRect(Color.White, bounds.topLeft, bounds.size, style = Stroke(2.dp.toPx() / scale))
+                        }
+                    }
+                    if (brushPreview) {
+                        // Shown at the brush's real on-screen size while its slider is being dragged.
+                        val radius = settings.brushDp * density / 2
+                        drawCircle(Color.White.copy(alpha = 0.25f), radius, center)
+                        drawCircle(Color.White, radius, center, style = Stroke(2.dp.toPx()))
+                    }
+                }
+            }
+
+            Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    if (selectedLabel != null) {
+                        LabelOptions(
+                            label = selectedLabel,
+                            imagePxPerDp = imagePxPerDp,
+                            update = { transform -> viewModel.updateLabel(selectedLabel.id, transform) },
+                            onEditText = { textDialog = TextDialog.Edit(selectedLabel.id, selectedLabel.text) },
+                            onDelete = {
+                                viewModel.removeLabel(selectedLabel.id)
+                                selectedLabelId = null
+                            },
+                        )
+                    } else {
+                        ToolOptions(tool, settings, viewModel::updateSettings, onBrushPreview = { brushPreview = it })
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        val select: (EditorTool) -> Unit = {
+                            tool = it
+                            selectedLabelId = null
+                        }
+                        ToolButton(EditorTool.Pen, Icons.Rounded.Draw, R.string.editor_tool_pen, tool, select)
+                        ToolButton(EditorTool.Arrow, Icons.Rounded.NorthEast, R.string.editor_tool_arrow, tool, select)
+                        ToolButton(EditorTool.Box, Icons.Rounded.CropSquare, R.string.editor_tool_rectangle, tool, select)
+                        ToolButton(EditorTool.Ellipse, Icons.Outlined.Circle, R.string.editor_tool_oval, tool, select)
+                        ToolButton(EditorTool.Text, Icons.Rounded.TextFields, R.string.editor_tool_text, tool, select)
+                        ToolButton(EditorTool.Blur, Icons.Rounded.BlurOn, R.string.editor_tool_blur, tool, select)
+                        ToolButton(EditorTool.Pixelate, Icons.Rounded.GridOn, R.string.editor_tool_pixelate, tool, select)
+                    }
                 }
             }
         }
     }
 
-    pendingLabel?.let { position ->
-        TextEntryDialog(
-            onDismiss = { pendingLabel = null },
+    when (val dialog = textDialog) {
+        null -> Unit
+        is TextDialog.New -> TextEntryDialog(
+            initial = "",
+            onDismiss = { textDialog = null },
             onConfirm = { text ->
-                viewModel.add(Mark.Label(position, text, settings.color, settings.textDp * imagePxPerDp))
-                pendingLabel = null
+                val id = viewModel.newLabelId()
+                viewModel.add(Mark.Label(id, dialog.position, text, settings.color, settings.textDp * imagePxPerDp))
+                selectedLabelId = id
+                textDialog = null
+            },
+        )
+        is TextDialog.Edit -> TextEntryDialog(
+            initial = dialog.text,
+            onDismiss = { textDialog = null },
+            onConfirm = { text ->
+                viewModel.updateLabel(dialog.id) { it.copy(text = text) }
+                textDialog = null
             },
         )
     }
@@ -365,15 +479,42 @@ private fun BarButton(icon: ImageVector, label: Int, enabled: Boolean = true, on
 }
 
 @Composable
-private fun TextEntryDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
+private fun TextEntryDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.editor_tool_text)) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.focusRequester(focus)) },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text(stringResource(R.string.editor_add)) } },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text(stringResource(R.string.editor_done)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.editor_cancel)) } },
     )
+}
+
+/** Options for the selected text label. Every change is a separate undo step. */
+@Composable
+private fun LabelOptions(
+    label: Mark.Label,
+    imagePxPerDp: Float,
+    update: ((Mark.Label) -> Mark.Label) -> Unit,
+    onEditText: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Palette(label.color) { color -> update { it.copy(color = color) } }
+        SettingSlider(
+            label = R.string.editor_text_size,
+            value = (label.size / imagePxPerDp).coerceIn(EditorSettings.TEXT_RANGE),
+            range = EditorSettings.TEXT_RANGE,
+        ) { dp -> update { it.copy(size = dp * imagePxPerDp) } }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.editor_text_background), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            Switch(checked = label.background, onCheckedChange = { on -> update { it.copy(background = on) } })
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onEditText) { Text(stringResource(R.string.editor_edit_text)) }
+            TextButton(onClick = onDelete) { Text(stringResource(R.string.editor_delete)) }
+        }
+    }
 }

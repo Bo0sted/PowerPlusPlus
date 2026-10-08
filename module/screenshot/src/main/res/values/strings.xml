@@ -4,6 +4,8 @@
     <string name="screenshot_shape_circle">Circle</string>
     <string name="screenshot_shape_horizontal">Full-width strip</string>
     <string name="screenshot_shape_vertical">Full-height strip</string>
+    <string name="screenshot_size_max">Max</string>
+    <string name="screenshot_size_default">Default</string>
     <string name="screenshot_copy">Copy</string>
     <string name="screenshot_save">Save</string>
     <string name="screenshot_share">Share</string>
@@ -24,7 +26,10 @@
     <string name="editor_brush_size">Brush size</string>
     <string name="editor_area_brush">Brush</string>
     <string name="editor_area_rectangle">Rectangle</string>
-    <string name="editor_add">Add</string>
+    <string name="editor_done">Done</string>
+    <string name="editor_text_background">Background</string>
+    <string name="editor_edit_text">Edit text</string>
+    <string name="editor_delete">Delete</string>
     <string name="editor_cancel">Cancel</string>
     <string name="screenshot_copied">Copied</string>
     <string name="screenshot_saved">Saved to Pictures/Power++</string>

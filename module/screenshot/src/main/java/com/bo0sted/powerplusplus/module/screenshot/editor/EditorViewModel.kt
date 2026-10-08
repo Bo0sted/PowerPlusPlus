@@ -50,8 +50,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { settingsStore.update(transform) }
     }
 
+    private var nextLabelId = 1L
+
+    fun newLabelId(): Long = nextLabelId++
+
     fun add(mark: Mark) {
         history = history.add(mark)
+    }
+
+    fun updateLabel(id: Long, transform: (Mark.Label) -> Mark.Label) {
+        history = history.updateLabel(id, transform)
+    }
+
+    fun removeLabel(id: Long) {
+        history = history.removeLabel(id)
     }
 
     fun undo() {
