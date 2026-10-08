@@ -84,7 +84,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - Future actions (search, translate…) may come later.
 
 ### 3.3 OCR text search
-A separate module from 3.2. The flow:
+A separate module from 3.2. **Decided (user, 2026-10-08):** it works on the **frozen activation capture by default**, exactly like Smart screenshot (`usesActivationScreenshot = true`), with **Retake** next to Confirm/Reset for dynamic content. The flow:
 1. Tapping the module shows a **draggable cursor**.
 2. **Double-tapping** the screen starts screenshot capture. The user drags to choose the region, the same way XGesture does it.
 3. When dragging stops, **Confirm** and **Reset** buttons appear. Reset starts a new capture; Confirm runs OCR.
