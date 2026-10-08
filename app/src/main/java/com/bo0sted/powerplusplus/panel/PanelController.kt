@@ -2,12 +2,16 @@ package com.bo0sted.powerplusplus.panel
 
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
+import android.os.SystemClock
+import android.util.Log
+import android.view.Choreographer
+import android.view.Display
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bo0sted.powerplusplus.data.Backdrop
 import com.bo0sted.powerplusplus.data.PanelConfig
 import com.bo0sted.powerplusplus.data.PanelRepository
-import com.bo0sted.powerplusplus.module.ActionModule
+import com.bo0sted.powerplusplus.module.ModuleHost
 import com.bo0sted.powerplusplus.module.ModuleRegistry
 import com.bo0sted.powerplusplus.module.ToggleModule
 import com.bo0sted.powerplusplus.overlay.OverlayBackdrop
@@ -39,6 +43,7 @@ class PanelController @Inject constructor(
         repository.config.stateIn(scope, SharingStarted.Eagerly, PanelConfig())
 
     private var window: OverlayWindow? = null
+    private var opening = false
 
     enum class ShowResult { Shown, SystemPowerMenu, ServiceUnavailable }
 
@@ -51,22 +56,65 @@ class PanelController @Inject constructor(
      * whenever the lock screen is showing, including a swipe-only one and one occluded by another
      * activity (e.g. a call).
      */
-    fun show(): ShowResult {
-        if (window?.isShowing == true) return ShowResult.Shown
+    fun show(invocationElapsedMs: Long? = null): ShowResult {
+        if (window?.isShowing == true || opening) return ShowResult.Shown
         val host = hostProvider.host.value ?: return ShowResult.ServiceUnavailable
         if (host.service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             host.service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG)
             return ShowResult.SystemPowerMenu
         }
+        // TIMING EXPERIMENT (2026-10-08): capture the screen before the panel exists, then show the
+        // panel, and log how long each step takes. Not the final design; see AGENTS.md §3.5.
+        opening = true
+        val onShowAt = SystemClock.elapsedRealtime()
+        host.service.takeScreenshot(
+            Display.DEFAULT_DISPLAY,
+            host.service.mainExecutor,
+            object : AccessibilityService.TakeScreenshotCallback {
+                override fun onSuccess(screenshot: AccessibilityService.ScreenshotResult) {
+                    val capturedAt = SystemClock.elapsedRealtime()
+                    val buffer = screenshot.hardwareBuffer
+                    val size = "${buffer.width}x${buffer.height}"
+                    buffer.close()
+                    if (!opening) return
+                    addPanel(host)
+                    logTiming(invocationElapsedMs, onShowAt, capturedAt, "ok $size")
+                }
+
+                override fun onFailure(errorCode: Int) {
+                    val capturedAt = SystemClock.elapsedRealtime()
+                    if (!opening) return
+                    addPanel(host)
+                    logTiming(invocationElapsedMs, onShowAt, capturedAt, "failed code=$errorCode")
+                }
+            },
+        )
+        return ShowResult.Shown
+    }
+
+    private fun logTiming(invocationElapsedMs: Long?, onShowAt: Long, capturedAt: Long, outcome: String) {
+        val addedAt = SystemClock.elapsedRealtime()
+        Choreographer.getInstance().postFrameCallback {
+            val frameAt = SystemClock.elapsedRealtime()
+            val pressToSession = invocationElapsedMs?.let { "${onShowAt - it}" } ?: "?"
+            Log.i(
+                TIMING_TAG,
+                "power→session=${pressToSession}ms session→screenshot=${capturedAt - onShowAt}ms ($outcome) " +
+                    "screenshot→panelAdded=${addedAt - capturedAt}ms panelAdded→firstFrame=${frameAt - addedAt}ms " +
+                    "total=${invocationElapsedMs?.let { frameAt - it } ?: "?"}ms",
+            )
+        }
+    }
+
+    private fun addPanel(host: ModuleHost) {
+        opening = false
         val density = host.service.resources.displayMetrics.density
         val backdrop = when (config.value.backdrop) {
             Backdrop.Blur -> OverlayBackdrop.Blur(radiusPx = (BLUR_RADIUS_DP * density).roundToInt())
             Backdrop.Dim -> OverlayBackdrop.Dim()
         }
 
-        // Not focusable, so the app underneath never loses focus: some apps (e.g. banking) hide
-        // their content on focus loss. Back therefore goes to that app; the panel has a Close button.
-        val overlay = OverlayWindow(host.service, backdrop, focusable = false, onDismissRequest = ::dismiss)
+        val overlay = OverlayWindow(host.service, backdrop, onDismissRequest = ::dismiss)
         window = overlay
         overlay.show {
             val current by config.collectAsStateWithLifecycle()
@@ -84,17 +132,16 @@ class PanelController @Inject constructor(
                 )
             }
         }
-        return ShowResult.Shown
     }
 
     fun dismiss() {
+        opening = false
         window?.dismiss()
         window = null
     }
 
     private companion object {
         const val BLUR_RADIUS_DP = 24
+        const val TIMING_TAG = "PowerPP.Timing"
     }
 }
-
-internal typealias ActionHandler = (ActionModule) -> Unit

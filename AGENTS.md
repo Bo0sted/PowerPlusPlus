@@ -103,7 +103,19 @@ A separate module from 3.2. The flow:
 - **Confirmed on-device (2026-10-08, the user's banking app):** the app hides when it **loses input focus**.
   - With the panel made non-focusable (`FLAG_NOT_FOCUSABLE`), opening the panel no longer hides it.
   - The focusable Screen-text overlay still does.
-  - The panel is now permanently non-focusable and has a Close button. Back goes to the app underneath.
+  - The user then chose to **revert**: the panel is focusable again (Back closes it) and has no Close button. The focus bypass was dropped in favour of the activation screenshot.
+- **Timing measured on-device (2026-10-08, Pixel 9 Pro XL, 5 runs, `PowerPP.Timing` log):**
+
+  | Step | Time |
+  |---|---|
+  | power long-press → `onShow` (SystemUI `invocation_time_ms`, `elapsedRealtime`) | 9–31 ms |
+  | `takeScreenshot` (1344×2992, always succeeded) | **9–32 ms** (avg ≈ 21) |
+  | capture → panel `addView` | 16–29 ms |
+  | power → panel added, total | 49–79 ms |
+
+  The user noticed no slowdown. **Conclusion: capturing at activation is perceptually free.**
+  - The temporary experiment code is in `PanelController.show()`/`logTiming` ("TIMING EXPERIMENT"). It captures, then discards the buffer, then shows the panel. **Replace it** with the real activation-screenshot store when §3.5 is built.
+  - Not yet verified: that the capture contains the banking app's real content. That's the first on-device check once the capture is actually used.
 - **Decision pending (§7):** capture at activation (in `PowerSession.onShow`, before the panel window exists) rather than when a module is tapped.
   - Capturing on tap races our own panel's removal: there's no reliable signal that the removal has been composited, so the blurred panel could end up in the shot.
   - Capturing at activation is strictly ordered: the app still has focus and nothing of ours is on screen yet.

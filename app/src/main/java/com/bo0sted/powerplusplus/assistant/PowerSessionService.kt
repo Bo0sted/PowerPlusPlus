@@ -31,7 +31,9 @@ private class PowerSession(context: Context, private val panel: PanelController)
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
-        when (panel.show()) {
+        // Set by SystemUI's AssistManager with SystemClock.elapsedRealtime() when the press triggers.
+        val invokedAt = args?.getLong(INVOCATION_TIME_MS_KEY, 0L)?.takeIf { it > 0 }
+        when (panel.show(invokedAt)) {
             PanelController.ShowResult.Shown, PanelController.ShowResult.SystemPowerMenu -> Unit
             // The accessibility service isn't connected, so there is nothing to draw with.
             PanelController.ShowResult.ServiceUnavailable ->
@@ -40,3 +42,5 @@ private class PowerSession(context: Context, private val panel: PanelController)
         hide()
     }
 }
+
+private const val INVOCATION_TIME_MS_KEY = "invocation_time_ms"

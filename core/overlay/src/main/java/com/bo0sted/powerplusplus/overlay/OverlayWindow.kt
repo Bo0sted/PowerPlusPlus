@@ -35,16 +35,12 @@ import java.util.function.Consumer
  * [WindowManager] carries the token that lets it add accessibility overlays, which is why Power++
  * needs no "display over other apps" permission. One instance shows once; create a new one each time.
  *
- * @param focusable whether the window takes input focus. A non-focusable window leaves focus with
- *   the app underneath (`FLAG_NOT_FOCUSABLE`), so that app never sees a focus change — but it also
- *   never receives Back, which then goes to the app; provide another way to close.
- * @param onDismissRequest called when the user presses or swipes Back (focusable windows only), or
- *   when the screen turns off (which covers both locking and sleep). The owner decides how to dismiss.
+ * @param onDismissRequest called when the user presses or swipes Back, or when the screen turns off
+ *   (which covers both locking and sleep). The owner decides how to dismiss.
  */
 class OverlayWindow(
     private val service: AccessibilityService,
     private val backdrop: OverlayBackdrop = OverlayBackdrop.None,
-    private val focusable: Boolean = true,
     private val onDismissRequest: () -> Unit,
 ) : LifecycleOwner, SavedStateRegistryOwner {
 
@@ -111,8 +107,7 @@ class OverlayWindow(
         WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         // Windows added through WindowManager don't inherit hardware acceleration; Compose needs it.
         WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            (if (focusable) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE),
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.TOP or Gravity.START
