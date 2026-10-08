@@ -116,15 +116,19 @@ A separate module from 3.2. The flow:
   The user noticed no slowdown. **Conclusion: capturing at activation is perceptually free.**
   - The temporary experiment code is in `PanelController.show()`/`logTiming` ("TIMING EXPERIMENT"). It captures, then discards the buffer, then shows the panel. **Replace it** with the real activation-screenshot store when §3.5 is built.
   - Not yet verified: that the capture contains the banking app's real content. That's the first on-device check once the capture is actually used.
-- **Decision pending (§7):** capture at activation (in `PowerSession.onShow`, before the panel window exists) rather than when a module is tapped.
+- **Decided (user, 2026-10-08):**
+  - Capture at activation, **only when the panel contains a module that uses the screenshot** (Smart screenshot or OCR).
+  - If the capture is black (a `FLAG_SECURE` app), show a message (e.g. "This app blocks screenshots") instead of opening the editor.
+  - Module overlays stay focusable (Back works).
+- **Background:** capture at activation (in `PowerSession.onShow`, before the panel window exists) rather than when a module is tapped.
   - Capturing on tap races our own panel's removal: there's no reliable signal that the removal has been composited, so the blurred panel could end up in the shot.
   - Capturing at activation is strictly ordered: the app still has focus and nothing of ours is on screen yet.
   - Proposed gating: capture only if the panel contains a module that uses the screenshot.
 
 ### 3.6 Smart screenshot selection shapes (user, 2026-10-08)
 - Default: a resizable rectangle in the center (like XGesture).
-- A full-width band ("end to end") with adjustable height.
-- A full-height band with adjustable width.
+- **Horizontal edge-to-edge strip:** always spans the full screen width. Its height is adjustable (sensible default) and it can be dragged up and down.
+- **Vertical edge-to-edge strip:** always spans the full screen height. Its width is adjustable (sensible default) and it can be dragged left and right.
 - A circle.
 - Plus the editor tools from §3.4 (blur, pixelate, pen, …).
 
@@ -223,13 +227,7 @@ Nothing else changes.
 
 ## 7. Open questions waiting on the user
 
-1. **Activation screenshot details** (§3.5), asked 2026-10-08:
-   - Capture at activation (recommended) vs. on module tap.
-   - Capture only when the panel holds a module that can use it.
-   - Make the module overlays (text pick, later screenshot/OCR) non-focusable too, so apps don't hide behind them (Back would then go to the app; they all have Close).
-   - Circle crop output: transparent corners (PNG) recommended.
-   - Whether the full-width/full-height bands can be dragged as well as resized.
-   - (The focus experiment is done; see §3.5.)
+1. **Circle crop output** (§3.6): the result is a square image, so the corners outside the circle must be (a) transparent PNG (recommended), (b) kept (the circle is only a guide), or (c) filled with a colour. Asked 2026-10-08; the user asked why it would ever be transparent, the options were explained, and the answer is pending.
 2. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
 
 ## 8. Decision log
