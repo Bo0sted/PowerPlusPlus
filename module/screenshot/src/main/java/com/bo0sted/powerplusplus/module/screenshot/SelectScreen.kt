@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Crop169
 import androidx.compose.material.icons.rounded.CropPortrait
 import androidx.compose.material.icons.rounded.CropSquare
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
@@ -55,7 +56,7 @@ import androidx.compose.ui.unit.toSize
 import androidx.compose.foundation.layout.offset
 import kotlin.math.roundToInt
 
-enum class ScreenshotAction { Copy, Save, Share }
+enum class ScreenshotAction { Copy, Save, Share, Edit }
 
 private sealed interface Drag {
     data object Move : Drag
@@ -163,6 +164,7 @@ internal fun SelectScreen(
                 ActionButton(Icons.Rounded.ContentCopy, R.string.screenshot_copy) { onAction(ScreenshotAction.Copy, selection, shape) }
                 ActionButton(Icons.Rounded.Save, R.string.screenshot_save) { onAction(ScreenshotAction.Save, selection, shape) }
                 ActionButton(Icons.Rounded.Share, R.string.screenshot_share) { onAction(ScreenshotAction.Share, selection, shape) }
+                ActionButton(Icons.Rounded.Edit, R.string.screenshot_edit) { onAction(ScreenshotAction.Edit, selection, shape) }
             }
         }
     }

@@ -9,7 +9,8 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   1. Install on the Pixel and smoke-test: the setup flow, power long-press → panel, blur/dim, Back, page swiping, the editor, and the Power menu module.
   2. ~~The text-pick UI and Screen text (§3.2)~~: done, and the user confirmed it works.
   3. ~~Smart screenshot step 1 + activation capture~~: the user confirmed it works on-device. The banking app is captured with its real content, and Copy and Save work.
-  4. Then the Smart screenshot step-2 editor, then OCR (§3.3, §4).
+  4. Smart screenshot step-2 editor: built; **awaiting the user's on-device test**.
+  5. Then OCR (§3.3, §4).
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`, no remote yet. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs).
 - **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. No XGesture code is copied verbatim; where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
@@ -89,7 +90,7 @@ A separate module from 3.2. The flow:
 4. The results show as **clickable boxes**, the same as accessibility text search.
 
 ### 3.4 Smart screenshot
-- **Step 1 is implemented** as `:module:screenshot` (typeId `smart_screenshot`, `usesActivationScreenshot = true`). **Step 2 (the editor) is not built yet.**
+- **Step 1 is implemented** as `:module:screenshot` (typeId `smart_screenshot`, `usesActivationScreenshot = true`). **Step 2 (the editor) is implemented** and awaiting the user's on-device test.
 - **Flow:**
   1. The module `take()`s the activation screenshot (toast "Couldn't capture the screen" if there is none).
   2. It makes a software ARGB copy (`Dispatchers.Default`).
@@ -98,7 +99,7 @@ A separate module from 3.2. The flow:
 - **`SelectScreen`** (XGesture-like):
   - the frozen image with everything outside the selection darkened (58 %), the accent frame, handles and a centre crosshair
   - drag inside to move, drag a handle to resize (32 dp hit slop), tap outside to cancel
-  - a floating shape toolbar above the selection (Rectangle · Circle · Full-width strip · Full-height strip) and an action toolbar below it (**Copy · Save · Share**); both hide while dragging and stay inside the safe-drawing insets
+  - a floating shape toolbar above the selection (Rectangle · Circle · Full-width strip · Full-height strip) and an action toolbar below it (**Copy · Save · Share · Edit**); both hide while dragging and stay inside the safe-drawing insets
 - **`SelectionGeometry`** (pure, unit-tested):
   - defaults: rectangle 60 % × 35 % of the screen, circle 60 % of the short side, horizontal strip 20 % of the height, vertical strip 40 % of the width
   - 48 dp minimum
@@ -109,17 +110,29 @@ A separate module from 3.2. The flow:
   - **Copy/Share** write a PNG to `cacheDir/screenshots/`, served by the module's own FileProvider (`${applicationId}.screenshots`), and keep only the 5 newest files.
   - **Save** writes to `Pictures/Power++` via MediaStore (`IS_PENDING`; no permission needed).
   - The Share chooser is started *before* the overlay closes. While our accessibility overlay is visible, `BackgroundActivityStartController` allows the start (`BAL_ALLOW_NON_APP_VISIBLE_WINDOW`; `WindowState` counts system-type windows ≥ `FIRST_SYSTEM_WINDOW` as non-app visible windows).
-- **Step 2 plan:** a normal full-screen **Activity**, not an overlay. Accessibility overlays sit above the IME, so typing for the Text tool needs an app window; an activity also gives normal Back.
-  - Tools: pen, arrow, rectangle, oval, text, blur, pixelate (brush **and** rectangle modes), colour/width, undo/redo; Copy · Save · Share.
-  - Blur/pixelate strength and brush size sliders, persisted.
-  - Reached from an "Edit" button to be added to step 1's action toolbar.
-- Based on XGesture's smart screenshot, especially **Copy**: the image goes to the clipboard without being saved to the gallery.
-  - How it works: the PNG is written to the app-private `cacheDir/screenshots/`, exposed via `FileProvider`, and the clipboard gets `ClipData.newUri`. Android's clipboard can't hold raw bitmap bytes. XGesture does exactly this (`ScreenshotStorage.kt`); the user had doubted it, and the code confirmed it.
-  - Improvement over XGesture, which never deletes these files: prune old clipboard images automatically.
-- **Editor tools (v1):** pen (color and width), blur, pixelate, undo/redo, crop, arrows, shapes, text.
-- **Blur and pixelate strength** (user, 2026-10-08): each has a **slider** with a very wide range, from very light to very, very strong. The chosen values are **persisted** and restored next time.
-- **Blur/pixelate brush size** (user, 2026-10-08): a size slider with a live preview of the brush size while adjusting, persisted. **Decided (user): both** — a brush mode (painted, sized by the slider) and a rectangle mode (dragged).
-- **Capture method:** `AccessibilityService.takeScreenshot` (API 30+). It needs no MediaProjection consent prompt. Hide the overlay before capture. Secure (FLAG_SECURE) windows capture as black.
+- **Step 2: the editor** (`editor/` package), reached via **Edit**.
+  - The crop is handed over in-process via `EditorSession` (bitmaps are too big for an Intent), then `EditorActivity` is started while the overlay is still visible (BAL), and the overlay closes.
+  - **Why an Activity, not an overlay:** accessibility overlays sit above the IME, and the Text tool needs the keyboard; an activity also gets normal Back. It's declared in the module manifest with `excludeFromRecents`, `taskAffinity=""` and `Theme.Material.NoActionBar`.
+- **Editor model** (pure, unit-tested):
+  - `Mark` (`Pen`, `Arrow`, `Box`, `Ellipse`, `Label`, `Effect(kind, strength, area)`), with `EffectArea` = `Brush(points, diameter)` | `Box(rect)`. All coordinates are image pixels.
+  - `EditHistory`: undo/redo; adding a mark clears redo.
+- **`EditorViewModel`** holds the image, history and processed effect images, so a rotation doesn't lose work. It recycles everything in `onCleared`.
+- **Rendering:** `DrawScope.drawEdits` draws the image and marks. It's used on screen (inside a fit-to-view scale transform) **and** for export (`CanvasDrawScope` on an `ImageBitmap` at 1:1, `Density(1f)`), so the output matches the screen exactly.
+  - Text sizes are stored in image pixels and converted to sp via the scope's density.
+  - **Effects** draw a pre-processed full-image copy clipped to the area: `clipRect` for a box; for a brush, a `saveLayer` (spanning the *image* bounds), the stroke as a mask, then the processed image with `BlendMode.SrcIn`.
+  - Effects use the base image only, so earlier marks under an effect are covered, not blurred.
+- **`EditorEffects`** (strength 0..1, exponential, unit-tested):
+  - blur radius 1.5→300 px, done by repeated halving then bilinear upscaling
+  - pixel blocks 2→200 px, done by a bilinear shrink then a nearest-neighbour enlarge
+  - cached per kind and 1 %-quantised strength; the active tool's effect is prepared in the background when the tool or strength changes
+- **`EditorSettings`** are persisted with DataStore Preferences (`screenshot_editor`):
+  - colour (8-swatch palette), stroke width dp (1–24), text size dp (12–96), brush size dp (8–160), blur and pixelate strength (0–1), effect area mode (Brush or Rectangle)
+  - Sliders save on release (`onValueChangeFinished`), not on every frame.
+  - The brush-size slider shows a preview circle at the brush's real on-screen size while held.
+- **Editor UI:**
+  - top bar: Close · Undo · Redo · **Copy · Save · Share** (each renders, outputs, then closes the editor)
+  - bottom: tool options above the tool row (Pen · Arrow · Rectangle · Oval · Text · Blur · Pixelate)
+  - Text: tap the image → a dialog with a text field → the label is placed at the tap point
 
 ### 3.5 Activation screenshot (proposed by the user 2026-10-08; design agreed in principle, details pending §7)
 - **Problem:** some apps (the user's banking apps) hide their content as soon as Power++ activates. A system screenshot taken earlier still captures the real content, because the app only hides *after* the system's screenshot notification.

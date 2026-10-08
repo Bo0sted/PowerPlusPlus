@@ -1,6 +1,7 @@
 package com.bo0sted.powerplusplus.module.screenshot
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.widget.Toast
@@ -11,6 +12,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.bo0sted.powerplusplus.module.ActionModule
 import com.bo0sted.powerplusplus.module.ModuleHost
 import com.bo0sted.powerplusplus.module.PanelModule
+import com.bo0sted.powerplusplus.module.screenshot.editor.EditorActivity
+import com.bo0sted.powerplusplus.module.screenshot.editor.EditorSession
 import com.bo0sted.powerplusplus.overlay.OverlayWindow
 import com.bo0sted.powerplusplus.ui.PowerTheme
 import dagger.Binds
@@ -71,6 +74,14 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
                         close()
                         val saved = withContext(Dispatchers.IO) { ScreenshotOutput.save(service, cropped) }
                         service.toast(if (saved) R.string.screenshot_saved else R.string.screenshot_failed)
+                    }
+                    ScreenshotAction.Edit -> {
+                        // The editor takes ownership of the crop. Started while our overlay is still
+                        // visible, which is what allows the activity start (see Share).
+                        EditorSession.put(cropped)
+                        service.startActivity(Intent(service, EditorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        close()
+                        return@launch
                     }
                     ScreenshotAction.Share -> {
                         val intent = withContext(Dispatchers.IO) { ScreenshotOutput.shareIntent(service, cropped) }
