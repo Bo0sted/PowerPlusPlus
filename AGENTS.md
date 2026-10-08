@@ -94,6 +94,21 @@ A separate module from 3.2. The flow:
 - **Editor tools (v1):** pen (color and width), blur, pixelate, undo/redo, crop, arrows, shapes, text.
 - **Capture method:** `AccessibilityService.takeScreenshot` (API 30+). It needs no MediaProjection consent prompt. Hide the overlay before capture. Secure (FLAG_SECURE) windows capture as black.
 
+### 3.5 Activation screenshot (proposed by the user 2026-10-08; design agreed in principle, details pending §7)
+- **Problem:** some apps (the user's banking apps) hide their content as soon as Power++ activates. A system screenshot taken earlier still captures the real content, because the app only hides *after* the system's screenshot notification.
+- **Proposal:** capture the screen at activation, before the panel overlay is added, and hand that bitmap to Smart screenshot and OCR text search. It's discarded when the panel closes unless one of those modules took it. Screen text can't use it, since it reads the live node tree.
+- **Verified facts** (AOSP `main`):
+  - `AccessibilityService.takeScreenshot` → `WindowManagerService.captureDisplay(displayId, null, …)`. The default `CaptureArgs` has `captureSecureLayers = false`, so **`FLAG_SECURE` windows are always black**; no third-party method can avoid that.
+  - It does **not** notify the app's `Activity.ScreenCaptureCallback` (Android 14 screenshot detection). That's fired only via `IWindowManager.notifyScreenshotListeners`, which "should be invoked only by SysUI" (the user's hardware-key screenshots).
+- **Unverified hypothesis:** the apps may hide because our panel window is focusable and takes input focus (`onWindowFocusChanged(false)`). A non-focusable panel might stop the hiding entirely, but then Back wouldn't reach the panel. Needs an on-device experiment with the user's app.
+
+### 3.6 Smart screenshot selection shapes (user, 2026-10-08)
+- Default: a resizable rectangle in the center (like XGesture).
+- A full-width band ("end to end") with adjustable height.
+- A full-height band with adjustable width.
+- A circle.
+- Plus the editor tools from §3.4 (blur, pixelate, pen, …).
+
 ## 4. OCR engines and models
 
 - **Nothing is bundled.** Both the inference runtime and every model are downloaded, kept on disk, and removable in the app.
@@ -189,7 +204,8 @@ Nothing else changes.
 
 ## 7. Open questions waiting on the user
 
-1. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
+1. **Activation screenshot details** (§3.5), see the questions sent 2026-10-08: whether to capture only when the panel holds a module that can use it; whether to run the focus experiment first; the circle crop output; whether the full-width/full-height bands can be dragged as well as resized.
+2. **Git reflog:** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet.
 
 ## 8. Decision log
 
