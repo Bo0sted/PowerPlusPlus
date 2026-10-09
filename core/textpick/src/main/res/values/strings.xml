@@ -10,4 +10,12 @@
     <string name="textpick_close">Close</string>
     <string name="textpick_copied">Copied</string>
     <string name="textpick_no_text">No text found on screen</string>
+    <string name="textpick_show_list">Show the selected text</string>
+    <string name="textpick_hide_list">Hide the selected text</string>
+    <string name="textpick_edit">Edit</string>
+    <string name="textpick_remove">Remove</string>
+    <string name="textpick_original">Original: %1$s</string>
+    <string name="textpick_restore">Restore</string>
+    <string name="textpick_cancel">Cancel</string>
+    <string name="textpick_done">Done</string>
 </resources>

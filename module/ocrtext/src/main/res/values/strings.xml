@@ -1,0 +1,17 @@
+<resources>
+    <string name="module_ocr_text">OCR text</string>
+    <string name="ocr_hint_cursor">Drag to move the cursor, then double-tap where the text starts</string>
+    <string name="ocr_hint_drag">Now drag to select the text</string>
+    <string name="ocr_confirm">Confirm</string>
+    <string name="ocr_reset">Reset</string>
+    <string name="ocr_retake">Retake</string>
+    <string name="ocr_close">Close</string>
+    <string name="ocr_recognizing">Recognizing text…</string>
+    <string name="ocr_try_again">Try again</string>
+    <string name="ocr_open_settings">Open settings</string>
+    <string name="ocr_no_text">No text found in this area</string>
+    <string name="ocr_failed">Text recognition failed</string>
+    <string name="ocr_not_installed">The OCR model isn\'t installed</string>
+    <string name="ocr_capture_failed">Couldn\'t capture the screen</string>
+    <string name="ocr_blocked">This app blocks screenshots</string>
+</resources>

@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":module:powermenu"))
     implementation(project(":module:screentext"))
     implementation(project(":module:screenshot"))
+    implementation(project(":module:ocrtext"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

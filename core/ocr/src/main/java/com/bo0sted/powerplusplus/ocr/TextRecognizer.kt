@@ -21,17 +21,21 @@ class TextRecognizer @Inject constructor(private val components: OcrComponents) 
 
     val isInstalled: Boolean get() = components.isInstalled(OcrCatalog.PP_OCR_V6_MEDIUM)
 
+    /** Loads the models ahead of [recognize], e.g. while the user is still choosing a region. */
+    suspend fun preload() {
+        withContext(Dispatchers.Default) { mutex.withLock { loaded() } }
+    }
+
     /** The lines of text in [image], a software bitmap. Requires [isInstalled]. */
     suspend fun recognize(image: Bitmap): List<OcrLine> = withContext(Dispatchers.Default) {
-        mutex.withLock {
-            val loaded = ocr ?: run {
-                val started = SystemClock.elapsedRealtime()
-                PpOcr.open(components.engineLibrary(), components.directory(OcrCatalog.PP_OCR_V6_MEDIUM)).also {
-                    Log.d(TAG, "Models loaded in ${SystemClock.elapsedRealtime() - started} ms")
-                    ocr = it
-                }
-            }
-            loaded.recognize(image)
+        mutex.withLock { loaded().recognize(image) }
+    }
+
+    private fun loaded(): PpOcr = ocr ?: run {
+        val started = SystemClock.elapsedRealtime()
+        PpOcr.open(components.engineLibrary(), components.directory(OcrCatalog.PP_OCR_V6_MEDIUM)).also {
+            Log.d(TAG, "Models loaded in ${SystemClock.elapsedRealtime() - started} ms")
+            ocr = it
         }
     }
 

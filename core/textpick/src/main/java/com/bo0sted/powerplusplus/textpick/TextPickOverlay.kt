@@ -18,22 +18,29 @@ fun showTextPick(service: AccessibilityService, blocks: List<TextBlock>) {
         return
     }
     lateinit var window: OverlayWindow
-    window = OverlayWindow(service, onDismissRequest = { window.dismiss() })
+    val state = TextPickState(blocks)
+    window = OverlayWindow(
+        service,
+        onDismissRequest = { window.dismiss() },
+        onBackRequest = { if (state.editing != null) state.cancelEdit() else window.dismiss() },
+    )
     window.show {
         PowerTheme(darkTheme = true) {
             TextPickScreen(
-                blocks = blocks,
+                state = state,
                 onCopy = { text ->
                     copyToClipboard(service, text)
                     window.dismiss()
                 },
                 onClose = { window.dismiss() },
+                onEditingChange = window::setCompact,
             )
         }
     }
 }
 
-private fun copyToClipboard(service: AccessibilityService, text: String) {
+/** Puts [text] on the clipboard, with a confirmation only where Android doesn't show its own. */
+fun copyToClipboard(service: AccessibilityService, text: String) {
     service.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Power++", text))
     // Android 13+ shows its own confirmation; a toast there would duplicate it.
     if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {

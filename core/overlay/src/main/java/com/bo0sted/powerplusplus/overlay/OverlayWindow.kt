@@ -37,11 +37,14 @@ import java.util.function.Consumer
  *
  * @param onDismissRequest called when the user presses or swipes Back, or when the screen turns off
  *   (which covers both locking and sleep). The owner decides how to dismiss.
+ * @param onBackRequest called instead of [onDismissRequest] for Back, when the owner wants Back to
+ *   step back within its content (screen off still calls [onDismissRequest]).
  */
 class OverlayWindow(
     private val service: AccessibilityService,
     private val backdrop: OverlayBackdrop = OverlayBackdrop.None,
     private val onDismissRequest: () -> Unit,
+    private val onBackRequest: () -> Unit = onDismissRequest,
 ) : LifecycleOwner, SavedStateRegistryOwner {
 
     private val lifecycleRegistry = LifecycleRegistry(this)
@@ -69,7 +72,7 @@ class OverlayWindow(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent(content)
         }
-        val overlayRoot = OverlayRoot(service, onDismissRequest).apply {
+        val overlayRoot = OverlayRoot(service, onBackRequest).apply {
             addView(compose)
             setViewTreeLifecycleOwner(this@OverlayWindow)
             setViewTreeSavedStateRegistryOwner(this@OverlayWindow)
@@ -99,6 +102,19 @@ class OverlayWindow(
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         // The system may already have removed the window (for example on screen off).
         if (current.isAttachedToWindow) windowManager.removeViewImmediate(current)
+    }
+
+    /**
+     * Shrinks the window to its content's height at the top of the screen, or restores it to full
+     * screen. The system draws the keyboard below accessibility overlays (layer 13 vs 31 in
+     * `WindowManagerPolicy`) and only lifts it above activity windows, so the window must leave
+     * room for it while its content takes text input.
+     */
+    fun setCompact(compact: Boolean) {
+        val current = root ?: return
+        val params = current.layoutParams as WindowManager.LayoutParams
+        params.height = if (compact) WindowManager.LayoutParams.WRAP_CONTENT else WindowManager.LayoutParams.MATCH_PARENT
+        if (current.isAttachedToWindow) windowManager.updateViewLayout(current, params)
     }
 
     private fun layoutParams() = WindowManager.LayoutParams(
