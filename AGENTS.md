@@ -4,7 +4,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-**Session 2 (2026-10-08/09, the user's home machine) ended with everything committed. The user pushes from their own terminal (§10); session 2's commits weren't pushed yet at hand-off.**
+**Session 2 (2026-10-08/09, the user's home machine) ended with everything committed and pushed to `origin/main` (§10).**
 
 - **State:** every v1 module is built and **confirmed working by the user on-device**:
   - the panel and trigger (§2)
@@ -155,7 +155,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - The user reports XGesture with Medium takes about 10 s.
 - **Threading:** `TextRecognizer` (@Singleton) loads `PpOcr` once and runs calls one at a time on `Dispatchers.Default`.
 
-### 3.4 Smart screenshot### 3.4 Smart screenshot
+### 3.4 Smart screenshot
 - **Step 1 is implemented** as `:module:screenshot` (typeId `smart_screenshot`, `usesActivationScreenshot = true`). **Step 2 (the editor) is implemented.** Both steps are confirmed working by the user on-device.
 - **Flow:**
   1. The module `take()`s the activation screenshot (toast "Couldn't capture the screen" if there is none).
@@ -480,7 +480,7 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
 **Remote:** `origin` = `git@github.com:Bo0sted/PowerPlusPlus.git` (SSH, private repo `github.com/Bo0sted/PowerPlusPlus`). `main` tracks `origin/main`; first pushed 2026-10-08.
-- At the end of session 2 (2026-10-09), its commits (`ecbd612` onward) were local only, waiting for the user to push.
+- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09.
 - The user's SSH key (`~/.ssh/github`) has a passphrase, so the agent can't push from its own shell (batch mode). Run `git push` in the user's terminal panel, where the user enters the passphrase themselves. Push only when the user says so.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
