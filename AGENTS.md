@@ -4,7 +4,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-**Session 2 (2026-10-08/09, the user's home machine) ended with everything committed. Pushing to a remote happens at hand-off (§10).**
+**Session 2 (2026-10-08/09, the user's home machine) ended with everything committed. The user pushes from their own terminal (§10); session 2's commits weren't pushed yet at hand-off.**
 
 - **State:** every v1 module is built and **confirmed working by the user on-device**:
   - the panel and trigger (§2)
@@ -113,7 +113,10 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - The bottom bar shows "N selected ▴", which opens the list **above** the bar, without hiding the results.
   - The list shows about **3 entries**, then scrolls (user: it mustn't cover the screen). It follows each new pick.
   - The text is large (22 sp, letter-spaced 0.5 sp) so individual characters can be checked (user).
-- Each entry has Edit and Remove. **Edited picks are drawn in the theme's tertiary colour** on the box and in the list.
+- **Picked boxes are green** and **edited picks are red** (box and list entry), each with a dark- and light-theme shade chosen by the surface's luminance. The overlays currently always use the dark theme.
+  - Green: `#6FCF7F` dark, `#2E7D32` light. Red: `#FF6B6B` dark, `#C62828` light.
+  - The theme's own colours were too easy to miss, and a fixed bright red didn't blend (user, 2026-10-09).
+- Each entry has Edit and Remove.
 - **Copy** copies the list in pick order, edits included, one per line. Select all appends the rest in reading order.
 - **Editing:** the window shrinks to a card at the top (`OverlayWindow.setCompact`) with "Original: …", a text field, Restore, Cancel and Done.
   - Why: the keyboard is drawn *below* accessibility overlays and can't be lifted above them (§11).
@@ -123,7 +126,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - Two-finger pan. Outlines keep their on-screen width.
   - Taps are mapped back through `ZoomViewport` (pure, unit-tested), so they still pick the right box.
   - Zoom survives editing.
-  - **Reset zoom** appears at the top centre whenever zoom > 1×.
+  - **Reset zoom** appears whenever zoom > 1×, centred just above the selection list (or the toolbar when the list is closed) (user, 2026-10-09).
 
 **Pipeline** (`PpOcr`, reproducing PaddleX's general OCR pipeline: `paddlex/configs/pipelines/OCR.yaml` and the predictors it uses, read in the PaddleX/PaddleOCR sources 2026-10-08):
 - **BGR for both models.** PaddleX reads images as BGR, the models' `DecodeImage` says BGR, and the PP-OCRv6 *training* configs use BGR. PaddleX's `onnxruntime` engine uses the Runner predictors, which keep BGR. XGesture feeds recognition RGB, which deviates from training; not followed.
@@ -433,7 +436,8 @@ All decisions are from 2026-10-08.
 - **OCR model in use:** PP-OCRv6 Medium; the user's XGesture Medium speed (~10 s) is the reference.
 - **Visual feedback** (user, 2026-10-09): an action must open its window at once; long work shows progress in it. Messages go in the window, not toasts.
 - **Selection list + editing** (user, 2026-10-09): in the shared results screen, so Screen text has it too.
-- **OCR results zoom** (user, 2026-10-09): pinch-zoom like a photo, the boxes zooming with the image, with Reset zoom.
+- **OCR results zoom** (user, 2026-10-09): pinch-zoom like a photo, the boxes zooming with the image, with Reset zoom just above the selection list.
+- **Pick colours** (user, 2026-10-09): picks green, edited picks red, each with a dark- and light-mode shade that blends with the theme (§3.3), not a fixed bright colour.
 - **Lock screen** (user, 2026-10-08): the panel never shows while the lock screen is up. Instead, a power long-press opens the **system power menu**, with no overlay rendered (see §2.1).
   - Observed before the fix: the assistant session *is* invoked on the lock screen even without `supportsLaunchVoiceAssistFromKeyguard`, and the accessibility overlay draws over the keyguard.
 
@@ -476,6 +480,7 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
 **Remote:** `origin` = `git@github.com:Bo0sted/PowerPlusPlus.git` (SSH, private repo `github.com/Bo0sted/PowerPlusPlus`). `main` tracks `origin/main`; first pushed 2026-10-08.
+- At the end of session 2 (2026-10-09), its commits (`ecbd612` onward) were local only, waiting for the user to push.
 - The user's SSH key (`~/.ssh/github`) has a passphrase, so the agent can't push from its own shell (batch mode). Run `git push` in the user's terminal panel, where the user enters the passphrase themselves. Push only when the user says so.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
