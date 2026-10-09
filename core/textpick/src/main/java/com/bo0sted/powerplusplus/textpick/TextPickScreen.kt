@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -102,14 +103,14 @@ class TextPickState(val blocks: List<TextBlock>) {
  * Full-screen picker over the state's blocks: each block gets a box. Tapping a box adds its text to
  * the list (in tap order) or removes it; tapping elsewhere closes unless [closeOnTapOutside] is off.
  * The bottom toolbar opens the list, which can be scrolled and whose entries can be edited or
- * removed; edited boxes get their own colour. Copy copies the list, edits included, one per line.
+ * removed. Picked boxes are green, edited ones red. Copy copies the list, edits included, one per line.
  *
  * Editing shows only a card at the top with a text field: the owner shrinks the window
  * ([onEditingChange]) so the keyboard, which the system draws below overlays, stays visible.
  *
  * Over a [background], the image and its boxes can be pinched to zoom (up to 6×) and panned, like
- * a photo; taps still pick the box under the finger. While zoomed at all, Reset zoom appears at
- * the top. Zoom survives editing.
+ * a photo; taps still pick the box under the finger. While zoomed at all, Reset zoom appears just
+ * above the list (or the toolbar, when the list is closed). Zoom survives editing.
  *
  * @param background drawn under the boxes instead of the live screen: a display-sized capture, in
  *   the same screen pixels as the block bounds.
@@ -145,8 +146,8 @@ fun TextPickScreen(
     val corner = with(density) { 4.dp.toPx() }
     val strokePx = with(density) { 1.dp.toPx() }
     val pickedStrokePx = with(density) { 2.dp.toPx() }
-    val accent = MaterialTheme.colorScheme.primary
-    val editedAccent = MaterialTheme.colorScheme.tertiary
+    val pickedAccent = pickedGreen()
+    val editedAccent = editedRed()
     val scrim = Color.Black.copy(alpha = 0.16f)
 
     Box(
@@ -201,7 +202,7 @@ fun TextPickScreen(
                     val size = Size(block.bounds.width.toFloat(), block.bounds.height.toFloat())
                     val radius = CornerRadius(corner)
                     if (index in picks) {
-                        val color = if (picks.isEdited(index)) editedAccent else accent
+                        val color = if (picks.isEdited(index)) editedAccent else pickedAccent
                         drawRoundRect(color.copy(alpha = 0.33f), topLeft, size, radius)
                         drawRoundRect(color.copy(alpha = 0.87f), topLeft, size, radius, pickedStroke)
                     } else {
@@ -209,19 +210,6 @@ fun TextPickScreen(
                         drawRoundRect(Color.White.copy(alpha = 0.27f), topLeft, size, radius, stroke)
                     }
                 }
-            }
-        }
-
-        if (viewport.zoom > 1f) {
-            FilledTonalButton(
-                onClick = { viewport = ZoomViewport() },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 8.dp),
-            ) {
-                Icon(Icons.Rounded.ZoomOut, contentDescription = null)
-                Text(stringResource(R.string.textpick_reset_zoom), Modifier.padding(start = 8.dp))
             }
         }
 
@@ -235,6 +223,12 @@ fun TextPickScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (viewport.zoom > 1f) {
+                FilledTonalButton(onClick = { viewport = ZoomViewport() }) {
+                    Icon(Icons.Rounded.ZoomOut, contentDescription = null)
+                    Text(stringResource(R.string.textpick_reset_zoom), Modifier.padding(start = 8.dp))
+                }
+            }
             if (listOpen && picks.size > 0) PickListPanel(state, Modifier.heightIn(max = LIST_MAX_HEIGHT))
             Surface(
                 shape = RoundedCornerShape(28.dp),
@@ -278,6 +272,19 @@ fun TextPickScreen(
     }
 }
 
+/**
+ * Picks are green and edited picks red, each tuned for the theme's brightness. The theme's own
+ * colours (even its error red, pale in dark mode) were too easy to miss (user, 2026-10-09).
+ */
+@Composable
+private fun pickedGreen(): Color = if (isDarkSurface()) Color(0xFF6FCF7F) else Color(0xFF2E7D32)
+
+@Composable
+private fun editedRed(): Color = if (isDarkSurface()) Color(0xFFFF6B6B) else Color(0xFFC62828)
+
+@Composable
+private fun isDarkSurface(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
 /** About three entries (each at least 56 dp: the 48 dp buttons plus padding), then the list scrolls. */
 private val LIST_MAX_HEIGHT = 56.dp * 3 + 2.dp + 16.dp
 
@@ -310,7 +317,7 @@ private fun PickListPanel(state: TextPickState, modifier: Modifier) {
                     Text(
                         text = state.picks.textOf(pick, state.blocks),
                         style = pickTextStyle(),
-                        color = if (pick.edited != null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
+                        color = if (pick.edited != null) editedRed() else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f).padding(vertical = 8.dp),
                     )
                     IconButton(onClick = { state.startEdit(pick.index) }) {
