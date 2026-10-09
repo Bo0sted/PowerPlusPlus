@@ -16,6 +16,7 @@ dependencies {
     // Java API + the small JNI glue only: the app's packaging excludes libonnxruntime.so (the engine
     // itself), which is downloaded instead. See OrtEngine.
     api(libs.onnxruntime.android)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
 }
