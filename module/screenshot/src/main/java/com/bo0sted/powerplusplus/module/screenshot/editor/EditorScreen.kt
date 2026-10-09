@@ -81,6 +81,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bo0sted.powerplusplus.module.screenshot.R
+import com.bo0sted.powerplusplus.ui.MessageBar
 import kotlin.math.min
 
 enum class EditorTool { Pen, Arrow, Box, Ellipse, Text, Blur, Pixelate }
@@ -105,12 +106,15 @@ private sealed interface TextDialog {
  * image and finished marks render into a cached offscreen layer that is only redrawn when they
  * change, and the live layer on top draws just the mark being drawn, the label being moved and the
  * selection outline.
+ *
+ * @param message shown at the bottom of the image (a failed output, or a confirmation before closing).
  */
 @Composable
 internal fun EditorScreen(
     viewModel: EditorViewModel,
     onClose: () -> Unit,
     onOutput: (EditorOutput) -> Unit,
+    message: String?,
 ) {
     val image = viewModel.image ?: return
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -250,6 +254,7 @@ internal fun EditorScreen(
                         drawCircle(Color.White, radius, center, style = Stroke(2.dp.toPx()))
                     }
                 }
+                if (message != null) MessageBar(message, Modifier.align(Alignment.BottomCenter).padding(16.dp))
             }
 
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {

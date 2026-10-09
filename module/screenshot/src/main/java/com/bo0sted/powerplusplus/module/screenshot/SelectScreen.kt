@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -43,6 +45,7 @@ import com.bo0sted.powerplusplus.selection.SelectionCanvas
 import com.bo0sted.powerplusplus.selection.SelectionShape
 import com.bo0sted.powerplusplus.selection.ShapeToggle
 import com.bo0sted.powerplusplus.selection.rememberSelectionGeometry
+import com.bo0sted.powerplusplus.ui.MessageBar
 import kotlin.math.roundToInt
 import com.bo0sted.powerplusplus.selection.R as SelectionR
 
@@ -55,6 +58,8 @@ enum class ScreenshotAction { Copy, Save, Share, Edit }
  * [onRetake] is given — Retake, which replaces the frozen capture with a fresh one.
  *
  * @param onAction receives the selection in screenshot pixels.
+ * @param notice a message shown at the bottom (a failure, or a confirmation before closing).
+ * @param busy while an action runs: the toolbars hide and the selection can't be changed.
  */
 @Composable
 internal fun SelectScreen(
@@ -63,6 +68,8 @@ internal fun SelectScreen(
     onCancel: () -> Unit,
     onRetake: (() -> Unit)?,
     retaking: Boolean,
+    notice: String?,
+    busy: Boolean,
 ) {
     val density = LocalDensity.current
     val geometry = rememberSelectionGeometry(image)
@@ -86,9 +93,10 @@ internal fun SelectScreen(
             onDraggingChange = { dragging = it },
             onTapOutside = onCancel,
             modifier = Modifier.fillMaxSize(),
+            interactive = !busy,
         )
 
-        if (!dragging) {
+        if (!dragging && !busy) {
             val safe = WindowInsets.safeDrawing
             val layoutDirection = LocalLayoutDirection.current
             val margin = with(density) { 12.dp.toPx() }
@@ -115,6 +123,9 @@ internal fun SelectScreen(
                 ActionButton(Icons.Rounded.Share, R.string.screenshot_share) { onAction(ScreenshotAction.Share, selection, shape) }
                 ActionButton(Icons.Rounded.Edit, R.string.screenshot_edit) { onAction(ScreenshotAction.Edit, selection, shape) }
             }
+        }
+        if (notice != null) {
+            MessageBar(notice, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp))
         }
     }
 }

@@ -2,16 +2,21 @@ package com.bo0sted.powerplusplus.module.screenshot.editor
 
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import com.bo0sted.powerplusplus.module.screenshot.R
 import com.bo0sted.powerplusplus.module.screenshot.ScreenshotOutput
+import com.bo0sted.powerplusplus.ui.MESSAGE_CLOSE_DELAY_MS
 import com.bo0sted.powerplusplus.ui.PowerTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -24,6 +29,9 @@ class EditorActivity : ComponentActivity() {
     private val viewModel: EditorViewModel by viewModels()
     private var busy = false
 
+    /** Shown above the bottom panel instead of a toast, which Android hides while notifications are off. */
+    private var message by mutableStateOf<Int?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -33,7 +41,7 @@ class EditorActivity : ComponentActivity() {
         }
         setContent {
             PowerTheme(darkTheme = true) {
-                EditorScreen(viewModel, onClose = ::finish, onOutput = ::output)
+                EditorScreen(viewModel, onClose = ::finish, onOutput = ::output, message = message?.let { stringResource(it) })
             }
         }
     }
@@ -41,32 +49,50 @@ class EditorActivity : ComponentActivity() {
     private fun output(target: EditorOutput) {
         if (busy) return
         busy = true
+        message = null
         lifecycleScope.launch {
             val image = viewModel.render()
             if (image == null) {
                 busy = false
                 return@launch
             }
-            when (target) {
+            // A confirmation is shown before closing; a failure keeps the editor open to try again.
+            val outcome: Int? = when (target) {
                 EditorOutput.Copy -> {
                     val copied = withContext(Dispatchers.IO) { ScreenshotOutput.copy(applicationContext, image) }
-                    // Android 13+ shows its own clipboard confirmation.
-                    if (!copied) toast(R.string.screenshot_failed)
-                    else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) toast(R.string.screenshot_copied)
+                    when {
+                        !copied -> FAILED
+                        // Android 13+ shows its own clipboard confirmation.
+                        Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2 -> R.string.screenshot_copied
+                        else -> null
+                    }
                 }
                 EditorOutput.Save -> {
                     val saved = withContext(Dispatchers.IO) { ScreenshotOutput.save(applicationContext, image) }
-                    toast(if (saved) R.string.screenshot_saved else R.string.screenshot_failed)
+                    if (saved) R.string.screenshot_saved else FAILED
                 }
                 EditorOutput.Share -> {
                     val intent = withContext(Dispatchers.IO) { ScreenshotOutput.shareIntent(applicationContext, image) }
-                    if (intent == null) toast(R.string.screenshot_failed) else startActivity(intent)
+                    if (intent == null) FAILED else null.also { startActivity(intent) }
                 }
             }
             image.recycle()
-            finish()
+            when (outcome) {
+                null -> finish()
+                FAILED -> {
+                    message = FAILED
+                    busy = false
+                }
+                else -> {
+                    message = outcome
+                    delay(MESSAGE_CLOSE_DELAY_MS)
+                    finish()
+                }
+            }
         }
     }
 
-    private fun toast(message: Int) = Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
+    private companion object {
+        val FAILED = R.string.screenshot_failed
+    }
 }

@@ -24,7 +24,9 @@ import com.bo0sted.powerplusplus.textpick.TextPickScreen
 import com.bo0sted.powerplusplus.textpick.TextPickState
 import com.bo0sted.powerplusplus.textpick.copyToClipboard
 import com.bo0sted.powerplusplus.textpick.normalizeTextBlocks
+import com.bo0sted.powerplusplus.ui.MESSAGE_CLOSE_DELAY_MS
 import com.bo0sted.powerplusplus.ui.PowerTheme
+import com.bo0sted.powerplusplus.textpick.R as TextPickR
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -32,6 +34,7 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -146,8 +149,15 @@ class OcrTextModule @Inject constructor(private val recognizer: TextRecognizer) 
                     is Stage.Results -> TextPickScreen(
                         state = current.state,
                         onCopy = { text ->
-                            copyToClipboard(service, text)
-                            close()
+                            if (copyToClipboard(service, text)) {
+                                stage = Stage.Problem(TextPickR.string.textpick_copied)
+                                host.scope.launch {
+                                    delay(MESSAGE_CLOSE_DELAY_MS)
+                                    close()
+                                }
+                            } else {
+                                close()
+                            }
                         },
                         onClose = ::close,
                         onEditingChange = window::setCompact,

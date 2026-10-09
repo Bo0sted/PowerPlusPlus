@@ -1,10 +1,8 @@
 package com.bo0sted.powerplusplus.module.screenshot
 
-import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
-import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.runtime.getValue
@@ -12,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import com.bo0sted.powerplusplus.capture.ScreenImage
 import com.bo0sted.powerplusplus.capture.ScreenRecapture
 import com.bo0sted.powerplusplus.module.ActionModule
@@ -21,6 +20,8 @@ import com.bo0sted.powerplusplus.module.screenshot.editor.EditorActivity
 import com.bo0sted.powerplusplus.module.screenshot.editor.EditorSession
 import com.bo0sted.powerplusplus.overlay.OverlayWindow
 import com.bo0sted.powerplusplus.selection.SelectionShape
+import com.bo0sted.powerplusplus.ui.MESSAGE_CLOSE_DELAY_MS
+import com.bo0sted.powerplusplus.ui.MessageScreen
 import com.bo0sted.powerplusplus.ui.PowerTheme
 import dagger.Binds
 import dagger.Module
@@ -28,13 +29,15 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
  * Crop the screen as it was when Power++ was activated (rectangle, circle or edge-to-edge strip),
- * then copy, save or share it.
+ * then copy, save or share it. Problems and confirmations are shown in the window itself rather than
+ * as toasts, which Android hides while notifications are off.
  */
 class SmartScreenshotModule @Inject constructor() : ActionModule {
     override val typeId = "smart_screenshot"
@@ -43,39 +46,62 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
     override val usesActivationScreenshot = true
 
     override suspend fun run(host: ModuleHost) {
-        val service = host.service
-        val captured = host.activationScreenshot.take() ?: return service.toast(R.string.screenshot_capture_failed)
-        val image = withContext(Dispatchers.Default) {
-            ScreenImage.toSoftware(captured).also { captured.recycle() }
+        val captured = host.activationScreenshot.take()
+        val image = captured?.let { withContext(Dispatchers.Default) { ScreenImage.toSoftware(it).also { captured.recycle() } } }
+        when {
+            image == null -> showMessage(host, R.string.screenshot_capture_failed)
+            withContext(Dispatchers.Default) { ScreenImage.looksBlocked(image) } -> {
+                image.recycle()
+                showMessage(host, R.string.screenshot_blocked)
+            }
+            else -> showSelection(host, image)
         }
-        if (withContext(Dispatchers.Default) { ScreenImage.looksBlocked(image) }) {
-            image.recycle()
-            return service.toast(R.string.screenshot_blocked)
+    }
+
+    /** A window with only [message], for when there is nothing to select from. */
+    private fun showMessage(host: ModuleHost, message: Int) {
+        lateinit var window: OverlayWindow
+        window = OverlayWindow(host.service, onDismissRequest = { window.dismiss() })
+        window.show {
+            PowerTheme(darkTheme = true) {
+                MessageScreen(stringResource(message), onClose = { window.dismiss() })
+            }
         }
-        showSelection(host, image)
     }
 
     private fun showSelection(host: ModuleHost, initial: Bitmap) {
         val service = host.service
         lateinit var window: OverlayWindow
-        var busy = false
+        // While an action runs or a confirmation shows, the toolbars hide and the selection is fixed.
+        var busy by mutableStateOf(false)
         // Replaced by Retake; the frozen activation capture is the first value.
         var image by mutableStateOf(initial)
         var retaking by mutableStateOf(false)
+        var notice by mutableStateOf<Int?>(null)
         fun close() {
+            if (!window.isShowing) return
             window.dismiss()
             image.recycle()
+        }
+        /** Shows [message], then closes; for successes the user should still see confirmed. */
+        fun confirmAndClose(message: Int) {
+            notice = message
+            host.scope.launch {
+                delay(MESSAGE_CLOSE_DELAY_MS)
+                close()
+            }
         }
         fun retake() {
             if (retaking || !ScreenRecapture.isSupported) return
             retaking = true
+            notice = null
             host.scope.launch {
                 val fresh = ScreenRecapture.capture(service, image.width, image.height)
                 when {
-                    fresh == null -> service.toast(R.string.screenshot_capture_failed)
+                    fresh == null -> notice = R.string.screenshot_capture_failed
                     withContext(Dispatchers.Default) { ScreenImage.looksBlocked(fresh) } -> {
                         fresh.recycle()
-                        service.toast(R.string.screenshot_blocked)
+                        notice = R.string.screenshot_blocked
                     }
                     !window.isShowing -> fresh.recycle()
                     // The replaced image may still be referenced by a frame being rendered, so it is
@@ -88,20 +114,24 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
         fun finish(action: ScreenshotAction, selection: Rect, shape: SelectionShape) {
             if (busy) return
             busy = true
+            notice = null
             host.scope.launch {
                 val cropped = withContext(Dispatchers.Default) { ScreenshotImage.crop(image, selection, shape) }
+                // A failure keeps the window open so the user can try again.
+                var failed = false
                 when (action) {
                     ScreenshotAction.Copy -> {
-                        close()
                         val copied = withContext(Dispatchers.IO) { ScreenshotOutput.copy(service, cropped) }
-                        // Android 13+ shows its own clipboard confirmation.
-                        if (!copied) service.toast(R.string.screenshot_failed)
-                        else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) service.toast(R.string.screenshot_copied)
+                        when {
+                            !copied -> failed = true
+                            // Android 13+ shows its own clipboard confirmation.
+                            Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2 -> confirmAndClose(R.string.screenshot_copied)
+                            else -> close()
+                        }
                     }
                     ScreenshotAction.Save -> {
-                        close()
                         val saved = withContext(Dispatchers.IO) { ScreenshotOutput.save(service, cropped) }
-                        service.toast(if (saved) R.string.screenshot_saved else R.string.screenshot_failed)
+                        if (saved) confirmAndClose(R.string.screenshot_saved) else failed = true
                     }
                     ScreenshotAction.Edit -> {
                         // The editor takes ownership of the crop. Started while our overlay is still
@@ -115,11 +145,19 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
                         val intent = withContext(Dispatchers.IO) { ScreenshotOutput.shareIntent(service, cropped) }
                         // Started while our overlay is still visible: a visible system-type window is
                         // what allows an accessibility service to start an activity.
-                        if (intent == null) service.toast(R.string.screenshot_failed) else service.startActivity(intent)
-                        close()
+                        if (intent == null) {
+                            failed = true
+                        } else {
+                            service.startActivity(intent)
+                            close()
+                        }
                     }
                 }
                 cropped.recycle()
+                if (failed) {
+                    notice = R.string.screenshot_failed
+                    busy = false
+                }
             }
         }
 
@@ -132,14 +170,12 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
                     onCancel = ::close,
                     onRetake = if (ScreenRecapture.isSupported) ::retake else null,
                     retaking = retaking,
+                    notice = notice?.let { stringResource(it) },
+                    busy = busy,
                 )
             }
         }
     }
-}
-
-private fun AccessibilityService.toast(message: Int) {
-    Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 }
 
 @Module
