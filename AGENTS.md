@@ -25,8 +25,8 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   - The user tests on a Pixel 9 Pro XL (Android 17) over **wireless adb**. The address changes per session; ask the user for the `adb connect` line.
   - **Don't send input (taps or swipes) to the user's device.** Read state only (logcat, dumpsys, screencap) and ask the user to interact.
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
-- **Repository:** `/home/mc/Downloads/Github_Projects/Power++`, branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config (the global identity differs). The remote and how to push are in §10.
-- **Reference app:** a local clone of XGesture at `/home/mc/Downloads/Github_Projects/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. Where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
+- **Repository:** `~/github-clones/PowerPlusPlus` on the user's home machine (it was `~/Downloads/Github_Projects/Power++` on the work machine), branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config of each clone (the global identity differs), with no Claude co-author trailer. The remote and how to push are in §10.
+- **Reference app:** a local clone of XGesture next to the repo, at `~/github-clones/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. Where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
 
 ## 1. What the app is
 
@@ -351,18 +351,19 @@ Nothing else changes.
 - The single remaining Gradle deprecation warning (`Configuration.setVisible`) comes from a third-party plugin, not our scripts.
 - On first build, AGP auto-installed `build-tools;36.0.0` and `platform-tools` from Google, under the licenses already accepted.
 
-**Machine:** Arch Linux. The user requires tools from **Arch's official repos only, never the AUR**.
-
-**Before setup (historical, 2026-10-08):** only OpenJDK 17 was installed, and there was no Android SDK. `adb` is at `/usr/bin/adb`, from `extra/android-tools`.
+**Machines:** the user works on two Arch Linux machines (work and home, EndeavourOS at home), both set up the same way. The user requires tools from **Arch's official repos only, never the AUR**; what Arch doesn't package comes directly from Google.
 
 **Installed and decided (2026-10-08):**
-- **JDK 21 LTS** from `extra/jdk21-openjdk`, at `/usr/lib/jvm/java-21-openjdk`. The system default is still JDK 17. Gradle's daemon JVM is pinned to 21 via `gradle/gradle-daemon-jvm.properties`, and JDK auto-download is disabled (`org.gradle.java.installations.auto-download=false`), since the user allows only Arch-official tooling.
+- **From Arch's repos:** `extra/jdk21-openjdk` and `extra/android-tools` (`/usr/bin/adb`). Never install with plain `pacman -S` on a stale system: Arch doesn't support partial upgrades, and at home `android-tools` failed to load `libprotobuf` until a full `pacman -Syu`.
+- **JDK 21 LTS** at `/usr/lib/jvm/java-21-openjdk` (system default at home; at work the default stayed JDK 17). Gradle's daemon JVM is pinned to 21 via `gradle/gradle-daemon-jvm.properties`, and JDK auto-download is disabled (`org.gradle.java.installations.auto-download=false`), since the user allows only Arch-official tooling.
 - **Android SDK** directly from Google, never the AUR. It lives in `~/Android/Sdk` (`local.properties` → `sdk.dir`, gitignored). Installed:
   - `cmdline-tools;latest` (23.0, SHA-1 verified against Google's `repository2-3.xml`)
   - `platforms;android-37.0`
   - `build-tools;37.0.0`
+  - `build-tools;36.0.0` and `platform-tools` (AGP installs these on the first build if they're missing)
   - The NDK and CMake were installed and later removed at the user's request (2026-10-08); nothing needs native code.
   - The SDK licenses were accepted with the user's approval.
+  - **⚠️ Google's Android CLI telemetry:** in cmdline-tools 23.0 (found at home, 2026-10-08), `sdkmanager` is a deprecated wrapper that downloads Google's "Android CLI" to `~/.android/bin/android-cli` and runs it **with usage metrics on** (uploaded to `play.google.com/log`). Verified in its bytecode (`AndroidCLI.initMetrics`): only the per-run `--no-metrics` flag disables them; `~/.android/analytics.settings` `hasOptedIn:false` is ignored. Gradle never uses it. **Never run `sdkmanager`;** run `~/.android/bin/android-cli --no-metrics sdk …` instead.
 - **Gradle:** the wrapper, pinned to **9.8.1** with `distributionSha256Sum`. It was generated from the official distribution, SHA-256 verified.
 - **Versions at scaffold time:** see `gradle/libs.versions.toml` (AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Compose BOM 2026.09.00).
 - **IDE:** Android Studio is optional and up to the user. The project builds from the CLI with `./gradlew`.
@@ -404,7 +405,7 @@ All decisions are from 2026-10-08.
 
 ## 9. XGesture reference map
 
-Paths are relative to `/home/mc/Downloads/Github_Projects/XGesture/app/src/main/java/com/slideindex/app/`. Read them for behavior; don't copy them.
+Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex/app/`. Read them for behavior; don't copy them.
 
 | Feature | Where to look |
 |---|---|
@@ -465,7 +466,7 @@ Re-verify only if the target platform changes.
 - `addCrossWindowBlurEnabledListener` fires immediately with the current state, then on every change.
 - `BlurController` disables blur when: it isn't supported, `disable_window_blurs` is set, battery saver is on, media tunneling is active, or thermal status is ≥ CRITICAL.
 - **Legibility over the backdrop:** the blurred backdrop can't be measured (the system composites it after we draw), so panel text uses a soft dark shadow (`TextStyle.onBackdrop()`), page dots have a dark outline, and the blur dim is 0.2. The user confirmed labels are readable over a white banking app.
-- **Blur-behind must be paired with a non-zero dim** (`FLAG_DIM_BEHIND`, dimAmount 0.1; 0.4 when blur is unavailable), as in the AOSP window-blurs guide (source.android.com/docs/core/display/window-blurs).
+- **Blur-behind must be paired with a non-zero dim** (`FLAG_DIM_BEHIND`, dimAmount 0.2; 0.4 when blur is unavailable), as in the AOSP window-blurs guide (source.android.com/docs/core/display/window-blurs).
   - What happened (found on-device 2026-10-08, Pixel 9 Pro XL, Android 17): with dimAmount 0, the window's dim layer has alpha 0 and only a blur radius. The display hardware sometimes composited it (`DEVICE` in `dumpsys SurfaceFlinger`), and the hardware can't blur.
   - Symptoms: no blur on screen, yet blur visible in `screencap` (which is always GPU-composited), and blur appearing once anything forced recomposition (e.g. swiping pages).
   - Fixed in `OverlayBackdrop.Blur`.
