@@ -1,4 +1,4 @@
-package com.bo0sted.powerplusplus.module.screenshot
+package com.bo0sted.powerplusplus.capture
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

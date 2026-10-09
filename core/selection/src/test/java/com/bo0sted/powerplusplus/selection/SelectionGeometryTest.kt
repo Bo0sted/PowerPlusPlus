@@ -1,4 +1,4 @@
-package com.bo0sted.powerplusplus.module.screenshot
+package com.bo0sted.powerplusplus.selection
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect

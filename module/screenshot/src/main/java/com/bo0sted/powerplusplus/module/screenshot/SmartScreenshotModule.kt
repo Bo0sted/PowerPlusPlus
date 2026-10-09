@@ -12,12 +12,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
+import com.bo0sted.powerplusplus.capture.ScreenImage
+import com.bo0sted.powerplusplus.capture.ScreenRecapture
 import com.bo0sted.powerplusplus.module.ActionModule
 import com.bo0sted.powerplusplus.module.ModuleHost
 import com.bo0sted.powerplusplus.module.PanelModule
 import com.bo0sted.powerplusplus.module.screenshot.editor.EditorActivity
 import com.bo0sted.powerplusplus.module.screenshot.editor.EditorSession
 import com.bo0sted.powerplusplus.overlay.OverlayWindow
+import com.bo0sted.powerplusplus.selection.SelectionShape
 import com.bo0sted.powerplusplus.ui.PowerTheme
 import dagger.Binds
 import dagger.Module
@@ -43,9 +46,9 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
         val service = host.service
         val captured = host.activationScreenshot.take() ?: return service.toast(R.string.screenshot_capture_failed)
         val image = withContext(Dispatchers.Default) {
-            ScreenshotImage.toSoftware(captured).also { captured.recycle() }
+            ScreenImage.toSoftware(captured).also { captured.recycle() }
         }
-        if (withContext(Dispatchers.Default) { ScreenshotImage.looksBlocked(image) }) {
+        if (withContext(Dispatchers.Default) { ScreenImage.looksBlocked(image) }) {
             image.recycle()
             return service.toast(R.string.screenshot_blocked)
         }
@@ -70,7 +73,7 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
                 val fresh = ScreenRecapture.capture(service, image.width, image.height)
                 when {
                     fresh == null -> service.toast(R.string.screenshot_capture_failed)
-                    withContext(Dispatchers.Default) { ScreenshotImage.looksBlocked(fresh) } -> {
+                    withContext(Dispatchers.Default) { ScreenImage.looksBlocked(fresh) } -> {
                         fresh.recycle()
                         service.toast(R.string.screenshot_blocked)
                     }

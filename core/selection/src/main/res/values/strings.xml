@@ -1,0 +1,8 @@
+<resources>
+    <string name="selection_shape_rectangle">Rectangle</string>
+    <string name="selection_shape_circle">Circle</string>
+    <string name="selection_shape_horizontal">Full-width strip</string>
+    <string name="selection_shape_vertical">Full-height strip</string>
+    <string name="selection_size_max">Max</string>
+    <string name="selection_size_default">Default</string>
+</resources>

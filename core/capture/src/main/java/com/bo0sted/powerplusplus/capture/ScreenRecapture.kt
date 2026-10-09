@@ -1,4 +1,4 @@
-package com.bo0sted.powerplusplus.module.screenshot
+package com.bo0sted.powerplusplus.capture
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
@@ -23,7 +23,7 @@ import kotlin.coroutines.resume
  * overlay — and the captures are stacked bottom to top. The wallpaper isn't an accessibility window,
  * so it comes out black. Needs Android 14 (API 34); earlier versions have no per-window capture.
  */
-internal object ScreenRecapture {
+object ScreenRecapture {
 
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     val isSupported: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE

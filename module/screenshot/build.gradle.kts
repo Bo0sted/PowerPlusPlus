@@ -7,7 +7,9 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:capture"))
     implementation(project(":core:overlay"))
+    implementation(project(":core:selection"))
     implementation(project(":core:ui"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

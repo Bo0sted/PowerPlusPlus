@@ -1,4 +1,4 @@
-package com.bo0sted.powerplusplus.module.screenshot
+package com.bo0sted.powerplusplus.selection
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -6,11 +6,11 @@ import androidx.compose.ui.geometry.Size
 import kotlin.math.max
 import kotlin.math.min
 
-/** What part of the screenshot the selection describes. All coordinates are screenshot pixels. */
+/** What part of the image the selection describes. All coordinates are image pixels. */
 enum class SelectionShape {
     Rectangle,
 
-    /** A true circle; the crop has transparent corners. */
+    /** A true circle. */
     Circle,
 
     /** Always the full image width; only its height and vertical position change. */
