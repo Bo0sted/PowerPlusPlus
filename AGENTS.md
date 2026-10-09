@@ -4,7 +4,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-**Session 2 (2026-10-08/09, the user's home machine) ended with everything committed and pushed to `origin/main` (§10).**
+**Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Committed locally; not pushed yet (§10).
 
 - **State:** every v1 module is built and **confirmed working by the user on-device**:
   - the panel and trigger (§2)
@@ -14,14 +14,14 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   - Smart screenshot, both the selection and the editor (§3.4); not re-checked since its selection moved to `:core:selection` (§10)
   - the activation screenshot and Retake (§3.5, §3.5b)
   - the OCR engine/model manager, with ORT telemetry disabled (§4)
-- **Next action:** have the user re-check Smart screenshot and Screen text (§10). Otherwise none assigned. The open questions for the user are in §7 (Small model, in-overlay messages for other modules, tap-outside on the OCR selection screen).
+- **Next action:** wait for the user's next feature request. The user should still re-check Smart screenshot and Screen text on-device, including the new in-window messages (§10). The open question for the user is in §7 (Small model).
 - **How work is done here:**
   - Verify every API against AOSP or the pinned library source before relying on it. §11 lists what's already verified; don't re-research those.
   - Lint must stay at zero issues.
   - Commit after each confirmed step.
   - The user tests on a Pixel 9 Pro XL (Android 17) over **wireless adb**. The address changes per session; ask the user for the `adb connect` line.
   - **Don't send input (taps or swipes) to the user's device.** Read state only (logcat, dumpsys, screencap) and ask the user to interact.
-  - The phone's notifications are off for Power++, so **toasts don't show** (`NotificationService: Suppressing toast … by user request`). Read results from logcat, and show user-facing messages inside overlays (§3.3).
+  - The phone's notifications are off for Power++, so **toasts don't show** (`NotificationService: Suppressing toast … by user request`). Read results from logcat. Every user-facing message is shown inside Power++'s own windows (`MessageBar`/`MessageScreen` in `:core:ui`, §5); don't add toasts.
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
 - **Repository:** `~/github-clones/PowerPlusPlus` on the user's home machine (it was `~/Downloads/Github_Projects/Power++` on the work machine), branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config of each clone (the global identity differs), with no Claude co-author trailer. The remote and how to push are in §10.
 - **Reference app:** a local clone of XGesture next to the repo, at `~/github-clones/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. Where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
@@ -83,14 +83,14 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - tap toggles; tapping empty space closes
   - a bottom pill toolbar: "Tap text to select it" / "N selected", Select all ↔ Deselect all, Copy (disabled until something is selected), ×
   - Copy joins the selection in reading order, one per line, and closes
-  - "No text found on screen" toast when there's nothing
+  - "No text found on screen" when there's nothing: the window opens with only that message (`MessageScreen` over the live screen); tapping anywhere or × closes it
   - XGesture's extra "Segment" button (its word-split panel) is intentionally **not** included; v1 is Copy-only.
 - **Reading:** all windows from `service.windows`, except accessibility overlays, the IME and our own package.
   - Per node: `text`, else `contentDescription`, else `stateDescription`.
   - Nodes without `text` must be `isVisibleToUser`; nodes with `text` are kept even when not visible (XGesture found chat apps report message bodies that way). Bounds are clipped to the window.
   - **Password fields are always skipped** (an improvement over XGesture).
   - Traversal runs on `Dispatchers.Default`.
-- **Copy:** `ClipData.newPlainText`. A "Copied" toast only on API ≤ 32, because Android 13+ shows its own clipboard confirmation and the official copy/paste guide says not to duplicate it.
+- **Copy:** `ClipData.newPlainText`. `copyToClipboard` returns whether to confirm: only on API ≤ 32 does the window show "Copied" for `MESSAGE_CLOSE_DELAY_MS` (1.5 s) before closing, because Android 13+ shows its own clipboard confirmation and the official copy/paste guide says not to duplicate it. OCR text does the same.
 - **Selection list and editing** (user, 2026-10-09): shared with OCR text, described in §3.3.
 - Future actions (search, translate…) may come later.
 
@@ -158,10 +158,14 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 ### 3.4 Smart screenshot
 - **Step 1 is implemented** as `:module:screenshot` (typeId `smart_screenshot`, `usesActivationScreenshot = true`). **Step 2 (the editor) is implemented.** Both steps are confirmed working by the user on-device.
 - **Flow:**
-  1. The module `take()`s the activation screenshot (toast "Couldn't capture the screen" if there is none).
+  1. The module `take()`s the activation screenshot. If there is none, a window opens with only "Couldn't capture the screen" (`MessageScreen`; tap anywhere, × or Back closes).
   2. It makes a software ARGB copy (`Dispatchers.Default`).
-  3. `ScreenImage.looksBlocked` (`:core:capture`; a 48×48 sample grid over the middle 80 % of the height, all near-black) → toast "This app blocks screenshots".
+  3. `ScreenImage.looksBlocked` (`:core:capture`; a 48×48 sample grid over the middle 80 % of the height, all near-black) → the same kind of window with "This app blocks screenshots".
   4. Otherwise it shows `SelectScreen` in a focusable `OverlayWindow`.
+- **Messages in `SelectScreen`** (user, 2026-10-09: no toasts; the features only run in the overlay, so their messages belong there): a `MessageBar` at the bottom (`notice`).
+  - While an action runs (`busy`), the toolbars hide and the selection is fixed.
+  - **Save** shows "Saved to Pictures/Power++" for 1.5 s, then closes. **Copy** closes at once (on API ≤ 32 it shows "Copied" first). **Share** starts the chooser and closes.
+  - A failure ("Couldn't create the image") keeps the window open with the toolbars back, so the user can try again. A failed Retake shows its message the same way.
 - **`SelectScreen`** (XGesture-like), built on the shared `SelectionCanvas`, `ShapeToggle` and `SelectionGeometry` in `:core:selection` (moved there 2026-10-09 so OCR text reuses them):
   - the frozen image with everything outside the selection darkened (58 %), the accent frame, handles and a centre crosshair
   - drag inside to move, drag a handle to resize (32 dp hit slop), tap outside to cancel
@@ -219,6 +223,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - **action row at the very bottom** (user, 2026-10-08, for thumb reach), below the tool row: Close · Undo · Redo · **Copy · Save · Share** (each renders, outputs, then closes the editor). The whole screen sits in a `Surface(contentColor = White)`; without it the top-bar icons defaulted to black on black and looked missing.
   - bottom: tool options above the tool row (Pen · Arrow · Rectangle · Oval · Text · Blur · Pixelate)
   - Text: tap the image → a dialog with a text field → the label is placed at the tap point
+  - **Messages** (2026-10-09): a `MessageBar` at the bottom of the image. Save shows "Saved to Pictures/Power++" for 1.5 s, then the editor closes; Copy (API ≥ 33) and Share close at once; a failure keeps the editor open with the message so the user can try again.
 
 ### 3.5 Activation screenshot (user's idea, 2026-10-08; implemented and confirmed on-device)
 - **Problem:** some apps (the user's banking apps) hide their content as soon as Power++ activates. A system screenshot taken earlier still captures the real content, because the app only hides *after* the system's screenshot notification.
@@ -259,9 +264,9 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **Purpose split, as stated by the user:** the frozen activation capture is for apps that hide themselves on focus loss; **Retake** is for dynamic content (video, timers, anything that changed).
   - Retake can't help self-hiding apps: our selection overlay holds focus, so they're already hidden.
 - **Smart screenshot:** a **Retake** button in the Max/Default row under the shape toolbar. It replaces the frozen image and keeps the current selection.
-  - A blocked (black) result shows the toast and keeps the old image.
+  - A blocked (black) result shows "This app blocks screenshots" in the window and keeps the old image.
   - The replaced bitmap is left to the GC, not recycled, because a frame in flight may still reference it.
-- **OCR:** also gets Retake. Placement: the region-selection stage, next to Confirm/Reset.
+- **OCR:** also gets Retake. Placement: the region-selection stage, in the second bottom row next to Confirm (`RegionScreen`).
 - **Implementation (`ScreenRecapture`, in `:core:capture`):** Android 14+ only (`takeScreenshotOfWindow`); the button is hidden on 12–13, which have no per-window capture, and the only alternative would be a timing guess.
   - Each window from `getWindows()` except accessibility overlays is captured and stacked bottom-up onto a black display-sized canvas, after converting hardware bitmaps to software.
   - The rate limit is per window id, so the parallel per-window captures don't conflict.
@@ -340,7 +345,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 | Module | Role |
 |---|---|
 | `build-logic` | Included build with the convention plugins: `powerpp.android.application`, `powerpp.android.library`, `powerpp.android.compose`, `powerpp.hilt`, `powerpp.serialization`, `powerpp.panel.module`. Modules apply plugins **only** through these; AGP, KSP and the rest are on build-logic's classpath, not resolvable by id directly. |
-| `:core:ui` | `PowerTheme` |
+| `:core:ui` | `PowerTheme`; `MessageBar` (a rounded message bar with optional ×), `MessageScreen` (a window showing only a message; tap anywhere closes) and `MESSAGE_CLOSE_DELAY_MS` (1.5 s, how long a confirmation shows before its window closes). These replace toasts everywhere. |
 | `:core:module` | The module SPI: `PanelModule` (sealed; `usesActivationScreenshot` defaults to false), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService`, a scope tied to the connection, and `activationScreenshot`), `ActivationScreenshot` (single-owner holder: `take()` hands the bitmap over and the caller must recycle it; `replace()` recycles the old one), `ModuleRegistry` |
 | `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. |
 | `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing); an optional `onBackRequest` takes Back instead. `setCompact` shrinks it to its content at the top (for keyboard input). Single use: create a new one each time. |
@@ -400,9 +405,7 @@ Nothing else changes.
 ## 7. Open questions waiting on the user
 
 1. **PP-OCRv6 Small model:** add it as a downloadable option (XGesture recommends Small for speed; Medium stays)? Asked 2026-10-08; not answered. It needs pinning in `OcrCatalog` from PaddlePaddle's official files.
-2. **Toasts elsewhere:** Smart screenshot and Screen text still report problems with toasts, which the user's phone hides (§0). Move them into the overlays as OCR text does, or does the user enable notifications for Power++? Asked 2026-10-08; not answered.
-3. **OCR selection screen:** tapping outside the selection closes it (like Smart screenshot). Should only Back close it, with an × added? Asked 2026-10-09; not answered.
-4. **Git reflog (work PC only):** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet. (Pushing doesn't send the reflog.)
+2. **Git reflog (work PC only):** should the reflog entries that still reference the pre-rewrite commits (old author email) be purged? They expire on their own (~90 days) and are local only. Asked 2026-10-08; no answer yet. (Pushing doesn't send the reflog.)
 
 **Answered:**
 - **Circle crop:** transparent corners (PNG).
@@ -412,6 +415,8 @@ Nothing else changes.
 - **Auto Backup:** the user doesn't use it, but downloads stay in no-backup storage regardless.
 - **OCR region selection:** reuse Smart screenshot's resizable selection; shapes row at the bottom with Retake · Confirm centred under it (2026-10-09).
 - **OCR results:** only Back and × close them (2026-10-09).
+- **Toasts:** none anywhere; every message goes in the overlay (or the editor) (2026-10-09).
+- **OCR selection screen:** tapping outside the selection still closes it. What the user cares about is the results screen, which already ignores outside taps (2026-10-09).
 
 ## 8. Decision log
 
@@ -435,6 +440,7 @@ All decisions are from 2026-10-08.
 - **OCR engine settings** (2026-10-08): CPU, 4 threads. XNNPACK crashed (§3.3).
 - **OCR model in use:** PP-OCRv6 Medium; the user's XGesture Medium speed (~10 s) is the reference.
 - **Visual feedback** (user, 2026-10-09): an action must open its window at once; long work shows progress in it. Messages go in the window, not toasts.
+- **No toasts anywhere** (user, 2026-10-09): the features can only be used while an overlay is up, so their messages belong in it. Confirmations show for 1.5 s, then the window closes; failures keep it open.
 - **Selection list + editing** (user, 2026-10-09): in the shared results screen, so Screen text has it too.
 - **OCR results zoom** (user, 2026-10-09): pinch-zoom like a photo, the boxes zooming with the image, with Reset zoom just above the selection list.
 - **Pick colours** (user, 2026-10-09): picks green, edited picks red, each with a dark- and light-mode shade that blends with the theme (§3.3), not a fixed bright colour.
@@ -477,10 +483,12 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 - **OCR text** (§3.3), 2026-10-09: resizable selection, progress, results over the frozen capture, the selection list with editing (the keyboard appears in compact mode), the 3-entry list, pinch-zoom and Reset zoom.
 - **Lint:** zero issues across modules. All unit tests pass.
 
+**Session 3 (2026-10-09):** in-window messages replace every toast (Smart screenshot, its editor, Screen text, the "Copied" confirmation on API ≤ 32); the unused first-design OCR strings (`ocr_hint_cursor`, `ocr_hint_drag`, `ocr_reset`) were removed. Built, unit-tested, lint clean and installed on the phone; **not yet checked by the user on-device.**
+
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
 **Remote:** `origin` = `git@github.com:Bo0sted/PowerPlusPlus.git` (SSH, private repo `github.com/Bo0sted/PowerPlusPlus`). `main` tracks `origin/main`; first pushed 2026-10-08.
-- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09.
+- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09. Session 3's commit is local only until the user asks to push.
 - The user's SSH key (`~/.ssh/github`) has a passphrase, so the agent can't push from its own shell (batch mode). Run `git push` in the user's terminal panel, where the user enters the passphrase themselves. Push only when the user says so.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
