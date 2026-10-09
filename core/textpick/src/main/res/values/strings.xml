@@ -18,4 +18,5 @@
     <string name="textpick_restore">Restore</string>
     <string name="textpick_cancel">Cancel</string>
     <string name="textpick_done">Done</string>
+    <string name="textpick_reset_zoom">Reset zoom</string>
 </resources>

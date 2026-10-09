@@ -4,8 +4,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ZoomOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +51,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -63,6 +67,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
+import kotlin.math.roundToInt
 
 /**
  * What a [TextPickScreen] has picked and which pick is being edited. The window's owner keeps it,
@@ -101,6 +107,10 @@ class TextPickState(val blocks: List<TextBlock>) {
  * Editing shows only a card at the top with a text field: the owner shrinks the window
  * ([onEditingChange]) so the keyboard, which the system draws below overlays, stays visible.
  *
+ * Over a [background], the image and its boxes can be pinched to zoom (up to 6×) and panned, like
+ * a photo; taps still pick the box under the finger. While zoomed at all, Reset zoom appears at
+ * the top. Zoom survives editing.
+ *
  * @param background drawn under the boxes instead of the live screen: a display-sized capture, in
  *   the same screen pixels as the block bounds.
  * @param closeOnTapOutside off where the results took a while to get (OCR), so a stray tap can't
@@ -116,6 +126,8 @@ fun TextPickScreen(
     closeOnTapOutside: Boolean = true,
 ) {
     val editing = state.editing
+    // Above the editing branch, so the zoom is still there after editing.
+    var viewport by remember { mutableStateOf(ZoomViewport()) }
     LaunchedEffect(editing != null) { onEditingChange(editing != null) }
     if (editing != null) {
         EditCard(state, editing)
@@ -131,13 +143,13 @@ fun TextPickScreen(
     val density = LocalDensity.current
     val slopPx = with(density) { 10.dp.roundToPx() }
     val corner = with(density) { 4.dp.toPx() }
-    val stroke = Stroke(width = with(density) { 1.dp.toPx() })
-    val pickedStroke = Stroke(width = with(density) { 2.dp.toPx() })
+    val strokePx = with(density) { 1.dp.toPx() }
+    val pickedStrokePx = with(density) { 2.dp.toPx() }
     val accent = MaterialTheme.colorScheme.primary
     val editedAccent = MaterialTheme.colorScheme.tertiary
     val scrim = Color.Black.copy(alpha = 0.16f)
 
-    BoxWithConstraints(
+    Box(
         Modifier
             .fillMaxSize()
             .background(scrim)
@@ -147,33 +159,69 @@ fun TextPickScreen(
                 origin = IntOffset(location[0], location[1])
             },
     ) {
-        val listMaxHeight = maxHeight * 0.4f
-        Canvas(
+        // Gestures are read on this untransformed box, in screen pixels; only the canvas is zoomed.
+        Box(
             Modifier
                 .fillMaxSize()
+                .pointerInput(background != null) {
+                    if (background == null) return@pointerInput
+                    detectTransformGestures { centroid, pan, zoomChange, _ ->
+                        viewport = viewport.transformed(centroid, zoomChange, pan, size.toSize())
+                    }
+                }
                 .pointerInput(blocks, closeOnTapOutside) {
                     detectTapGestures { tap ->
-                        val hit = hitTest(blocks, tap.x.toInt() + origin.x, tap.y.toInt() + origin.y, slopPx)
+                        val point = viewport.toContent(tap)
+                        val slop = (slopPx / viewport.zoom).roundToInt()
+                        val hit = hitTest(blocks, point.x.roundToInt() + origin.x, point.y.roundToInt() + origin.y, slop)
                         if (hit != null) state.picks = state.picks.toggled(hit) else if (closeOnTapOutside) onClose()
                     }
                 },
         ) {
-            if (background != null) {
-                drawImage(background, dstOffset = IntOffset(-origin.x, -origin.y), dstSize = IntSize(background.width, background.height))
-                drawRect(scrim)
-            }
-            blocks.forEachIndexed { index, block ->
-                val topLeft = Offset((block.bounds.left - origin.x).toFloat(), (block.bounds.top - origin.y).toFloat())
-                val size = Size(block.bounds.width.toFloat(), block.bounds.height.toFloat())
-                val radius = CornerRadius(corner)
-                if (index in picks) {
-                    val color = if (picks.isEdited(index)) editedAccent else accent
-                    drawRoundRect(color.copy(alpha = 0.33f), topLeft, size, radius)
-                    drawRoundRect(color.copy(alpha = 0.87f), topLeft, size, radius, pickedStroke)
-                } else {
-                    drawRoundRect(Color.White.copy(alpha = 0.09f), topLeft, size, radius)
-                    drawRoundRect(Color.White.copy(alpha = 0.27f), topLeft, size, radius, stroke)
+            Canvas(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        scaleX = viewport.zoom
+                        scaleY = viewport.zoom
+                        translationX = viewport.pan.x
+                        translationY = viewport.pan.y
+                    },
+            ) {
+                // Outlines keep their on-screen width at any zoom.
+                val stroke = Stroke(width = strokePx / viewport.zoom)
+                val pickedStroke = Stroke(width = pickedStrokePx / viewport.zoom)
+                if (background != null) {
+                    drawImage(background, dstOffset = IntOffset(-origin.x, -origin.y), dstSize = IntSize(background.width, background.height))
+                    drawRect(scrim)
                 }
+                blocks.forEachIndexed { index, block ->
+                    val topLeft = Offset((block.bounds.left - origin.x).toFloat(), (block.bounds.top - origin.y).toFloat())
+                    val size = Size(block.bounds.width.toFloat(), block.bounds.height.toFloat())
+                    val radius = CornerRadius(corner)
+                    if (index in picks) {
+                        val color = if (picks.isEdited(index)) editedAccent else accent
+                        drawRoundRect(color.copy(alpha = 0.33f), topLeft, size, radius)
+                        drawRoundRect(color.copy(alpha = 0.87f), topLeft, size, radius, pickedStroke)
+                    } else {
+                        drawRoundRect(Color.White.copy(alpha = 0.09f), topLeft, size, radius)
+                        drawRoundRect(Color.White.copy(alpha = 0.27f), topLeft, size, radius, stroke)
+                    }
+                }
+            }
+        }
+
+        if (viewport.zoom > 1f) {
+            FilledTonalButton(
+                onClick = { viewport = ZoomViewport() },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp),
+            ) {
+                Icon(Icons.Rounded.ZoomOut, contentDescription = null)
+                Text(stringResource(R.string.textpick_reset_zoom), Modifier.padding(start = 8.dp))
             }
         }
 
@@ -187,7 +235,7 @@ fun TextPickScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (listOpen && picks.size > 0) PickListPanel(state, Modifier.heightIn(max = listMaxHeight))
+            if (listOpen && picks.size > 0) PickListPanel(state, Modifier.heightIn(max = LIST_MAX_HEIGHT))
             Surface(
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.94f),
@@ -230,6 +278,9 @@ fun TextPickScreen(
     }
 }
 
+/** About three entries (each at least 56 dp: the 48 dp buttons plus padding), then the list scrolls. */
+private val LIST_MAX_HEIGHT = 56.dp * 3 + 2.dp + 16.dp
+
 /** Large, slightly spaced text, so each character can be checked. */
 @Composable
 private fun pickTextStyle(): TextStyle = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, letterSpacing = 0.5.sp)
@@ -252,6 +303,7 @@ private fun PickListPanel(state: TextPickState, modifier: Modifier) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { state.startEdit(pick.index) }
+                        .heightIn(min = 56.dp)
                         .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
