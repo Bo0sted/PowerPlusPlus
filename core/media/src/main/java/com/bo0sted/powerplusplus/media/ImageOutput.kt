@@ -1,4 +1,4 @@
-package com.bo0sted.powerplusplus.module.screenshot
+package com.bo0sted.powerplusplus.media
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -16,16 +16,16 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Where a finished screenshot goes. [copy] and [share] use a PNG in the app's private cache exposed
+ * Where a finished image (a screenshot crop, extracted media) goes. [copy] and [share] use a PNG in the app's private cache exposed
  * through a FileProvider — Android's clipboard holds content URIs, never image bytes — so nothing
  * lands in the gallery. Only [save] writes to shared storage. Call off the main thread.
  */
-internal object ScreenshotOutput {
+object ImageOutput {
 
     fun copy(context: Context, image: Bitmap): Boolean {
         val uri = writeCacheFile(context, image) ?: return false
         context.getSystemService(ClipboardManager::class.java)
-            .setPrimaryClip(ClipData.newUri(context.contentResolver, "Power++ screenshot", uri))
+            .setPrimaryClip(ClipData.newUri(context.contentResolver, "Power++ image", uri))
         return true
     }
 
@@ -35,7 +35,7 @@ internal object ScreenshotOutput {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = MIME
             putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newUri(context.contentResolver, "Power++ screenshot", uri)
+            clipData = ClipData.newUri(context.contentResolver, "Power++ image", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         return Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -77,10 +77,17 @@ internal object ScreenshotOutput {
         directory.listFiles()?.sortedByDescending { it.lastModified() }?.drop(KEEP_FILES - 1)?.forEach { it.delete() }
     }
 
-    private fun fileStem(): String = "Power++_" + SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+    /** A timestamped name; never the same twice, even for several images saved in one millisecond. */
+    @Synchronized
+    private fun fileStem(): String {
+        lastStamp = maxOf(System.currentTimeMillis(), lastStamp + 1)
+        return "Power++_" + SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date(lastStamp))
+    }
+
+    private var lastStamp = 0L
 
     private const val MIME = "image/png"
     private const val CACHE_DIR = "screenshots"
     private const val KEEP_FILES = 5
-    const val AUTHORITY_SUFFIX = ".screenshots"
+    private const val AUTHORITY_SUFFIX = ".screenshots"
 }

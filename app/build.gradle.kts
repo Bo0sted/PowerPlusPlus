@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":module:screentext"))
     implementation(project(":module:screenshot"))
     implementation(project(":module:ocrtext"))
+    implementation(project(":module:mediaextractor"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

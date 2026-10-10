@@ -1,6 +1,8 @@
 <resources>
     <string name="module_smart_screenshot">Smart screenshot</string>
     <string name="screenshot_retake">Retake</string>
+    <string name="screenshot_scan">Scan</string>
+    <string name="screenshot_scan_none">No media found</string>
     <string name="screenshot_copy">Copy</string>
     <string name="screenshot_save">Save</string>
     <string name="screenshot_share">Share</string>

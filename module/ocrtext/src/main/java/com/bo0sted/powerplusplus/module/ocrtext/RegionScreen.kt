@@ -2,28 +2,11 @@ package com.bo0sted.powerplusplus.module.ocrtext
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,12 +14,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -48,6 +29,10 @@ import com.bo0sted.powerplusplus.selection.SelectionShape
 import com.bo0sted.powerplusplus.selection.ShapeToggle
 import com.bo0sted.powerplusplus.selection.rememberSelectionGeometry
 import com.bo0sted.powerplusplus.textpick.TextPickState
+import com.bo0sted.powerplusplus.ui.OverlayBar
+import com.bo0sted.powerplusplus.ui.OverlayBarText
+import com.bo0sted.powerplusplus.ui.OverlayBottomBars
+import com.bo0sted.powerplusplus.ui.OverlayCloseButton
 import com.bo0sted.powerplusplus.selection.R as SelectionR
 
 /** What the OCR window shows. */
@@ -112,14 +97,14 @@ internal fun RegionScreen(
             )
 
             if (stage is Select && !dragging) {
-                BottomBars {
-                    Bar(Modifier.align(Alignment.CenterHorizontally)) {
+                OverlayBottomBars {
+                    OverlayBar {
                         SHAPES.forEach { ShapeToggle(it, shape) { picked -> shape = picked; selection = geometry.default(picked) } }
                         TextButton(onClick = { selection = geometry.max(shape, selection) }) { Text(stringResource(SelectionR.string.selection_size_max)) }
                         TextButton(onClick = { selection = geometry.default(shape) }) { Text(stringResource(SelectionR.string.selection_size_default)) }
                     }
-                    Bar(Modifier.align(Alignment.CenterHorizontally)) {
-                        stage.notice?.let { BarText(it) }
+                    OverlayBar {
+                        stage.notice?.let { OverlayBarText(stringResource(it)) }
                         if (onRetake != null) {
                             TextButton(onClick = onRetake, enabled = !retaking) { Text(stringResource(R.string.ocr_retake)) }
                         }
@@ -130,68 +115,23 @@ internal fun RegionScreen(
         }
 
         when (stage) {
-            Recognizing -> BottomBars {
-                Bar(Modifier.align(Alignment.CenterHorizontally)) {
+            Recognizing -> OverlayBottomBars {
+                OverlayBar {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    BarText(R.string.ocr_recognizing)
-                    CloseButton(onClose)
+                    OverlayBarText(stringResource(R.string.ocr_recognizing))
+                    OverlayCloseButton(onClose)
                 }
             }
-            is Problem -> BottomBars {
-                Bar(Modifier.align(Alignment.CenterHorizontally)) {
-                    BarText(stage.message)
+            is Problem -> OverlayBottomBars {
+                OverlayBar {
+                    OverlayBarText(stringResource(stage.message))
                     stage.action?.let { action ->
                         TextButton(onClick = { onProblemAction(action) }) { Text(stringResource(action.label)) }
                     }
-                    CloseButton(onClose)
+                    OverlayCloseButton(onClose)
                 }
             }
             is Select, is Stage.Results -> Unit // Select is above; Results are shown by TextPickScreen.
         }
     }
-}
-
-@Composable
-private fun BoxScope.BottomBars(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        content = content,
-    )
-}
-
-@Composable
-private fun Bar(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.94f),
-        // Taps on a bar must not reach the canvas (which would close the window).
-        modifier = modifier.pointerInput(Unit) { detectTapGestures { } },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            content = content,
-        )
-    }
-}
-
-@Composable
-private fun RowScope.BarText(@StringRes text: Int) {
-    Text(
-        text = stringResource(text),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp).weight(1f, fill = false),
-    )
-}
-
-@Composable
-private fun CloseButton(onClose: () -> Unit) {
-    IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.ocr_close)) }
 }

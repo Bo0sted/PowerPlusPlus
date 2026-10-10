@@ -12,7 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import com.bo0sted.powerplusplus.module.screenshot.R
-import com.bo0sted.powerplusplus.module.screenshot.ScreenshotOutput
+import com.bo0sted.powerplusplus.media.ImageOutput
 import com.bo0sted.powerplusplus.ui.MESSAGE_CLOSE_DELAY_MS
 import com.bo0sted.powerplusplus.ui.PowerTheme
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +59,7 @@ class EditorActivity : ComponentActivity() {
             // A confirmation is shown before closing; a failure keeps the editor open to try again.
             val outcome: Int? = when (target) {
                 EditorOutput.Copy -> {
-                    val copied = withContext(Dispatchers.IO) { ScreenshotOutput.copy(applicationContext, image) }
+                    val copied = withContext(Dispatchers.IO) { ImageOutput.copy(applicationContext, image) }
                     when {
                         !copied -> FAILED
                         // Android 13+ shows its own clipboard confirmation.
@@ -68,11 +68,11 @@ class EditorActivity : ComponentActivity() {
                     }
                 }
                 EditorOutput.Save -> {
-                    val saved = withContext(Dispatchers.IO) { ScreenshotOutput.save(applicationContext, image) }
+                    val saved = withContext(Dispatchers.IO) { ImageOutput.save(applicationContext, image) }
                     if (saved) R.string.screenshot_saved else FAILED
                 }
                 EditorOutput.Share -> {
-                    val intent = withContext(Dispatchers.IO) { ScreenshotOutput.shareIntent(applicationContext, image) }
+                    val intent = withContext(Dispatchers.IO) { ImageOutput.shareIntent(applicationContext, image) }
                     if (intent == null) FAILED else null.also { startActivity(intent) }
                 }
             }

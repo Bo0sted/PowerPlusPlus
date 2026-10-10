@@ -2,9 +2,15 @@ package com.bo0sted.powerplusplus.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,28 +36,69 @@ import androidx.compose.ui.unit.dp
  */
 const val MESSAGE_CLOSE_DELAY_MS = 1500L
 
-/** A short message in a rounded bar, with an optional Close button. Taps on it go nowhere else. */
+/**
+ * The rounded pill that holds controls and messages at the bottom of Power++'s overlays. Taps on it
+ * never reach what's underneath (which might close the window or pick something).
+ */
 @Composable
-fun MessageBar(text: String, modifier: Modifier = Modifier, onClose: (() -> Unit)? = null) {
+fun OverlayBar(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     Surface(
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.94f),
         modifier = modifier.pointerInput(Unit) { detectTapGestures { } },
     ) {
         Row(
-            modifier = Modifier.padding(start = 20.dp, end = if (onClose != null) 4.dp else 20.dp, top = 4.dp, bottom = 4.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 12.dp).weight(1f, fill = false),
-            )
-            if (onClose != null) {
-                IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.ui_close)) }
-            }
-        }
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            content = content,
+        )
+    }
+}
+
+/** Stacks [OverlayBar]s at the bottom centre of an overlay, above the navigation bar. */
+@Composable
+fun BoxScope.OverlayBottomBars(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = content,
+    )
+}
+
+/** Secondary text inside an [OverlayBar]; it gives way to the bar's buttons when space is short. */
+@Composable
+fun RowScope.OverlayBarText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, end = 4.dp).weight(1f, fill = false),
+    )
+}
+
+/** The × that closes an overlay. */
+@Composable
+fun OverlayCloseButton(onClose: () -> Unit) {
+    IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.ui_close)) }
+}
+
+/** A short message in an [OverlayBar], with an optional Close button. */
+@Composable
+fun MessageBar(text: String, modifier: Modifier = Modifier, onClose: (() -> Unit)? = null) {
+    OverlayBar(modifier) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp).weight(1f, fill = false),
+        )
+        if (onClose != null) OverlayCloseButton(onClose)
     }
 }
 

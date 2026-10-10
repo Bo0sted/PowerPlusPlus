@@ -9,5 +9,6 @@ android {
 
 dependencies {
     api(libs.androidx.lifecycle.runtime.compose)
+    implementation(project(":core:ui"))
     implementation(libs.androidx.core.ktx)
 }

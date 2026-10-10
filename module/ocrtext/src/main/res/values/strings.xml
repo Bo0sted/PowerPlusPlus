@@ -2,7 +2,6 @@
     <string name="module_ocr_text">OCR text</string>
     <string name="ocr_confirm">Confirm</string>
     <string name="ocr_retake">Retake</string>
-    <string name="ocr_close">Close</string>
     <string name="ocr_recognizing">Recognizing text…</string>
     <string name="ocr_try_again">Try again</string>
     <string name="ocr_open_settings">Open settings</string>

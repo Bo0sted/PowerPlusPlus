@@ -54,7 +54,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -69,6 +68,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import com.bo0sted.powerplusplus.ui.editedColor
+import com.bo0sted.powerplusplus.ui.pickedColor
 import kotlin.math.roundToInt
 
 /**
@@ -146,8 +147,8 @@ fun TextPickScreen(
     val corner = with(density) { 4.dp.toPx() }
     val strokePx = with(density) { 1.dp.toPx() }
     val pickedStrokePx = with(density) { 2.dp.toPx() }
-    val pickedAccent = pickedGreen()
-    val editedAccent = editedRed()
+    val pickedAccent = pickedColor()
+    val editedAccent = editedColor()
     val scrim = Color.Black.copy(alpha = 0.16f)
 
     Box(
@@ -272,19 +273,6 @@ fun TextPickScreen(
     }
 }
 
-/**
- * Picks are green and edited picks red, each tuned for the theme's brightness. The theme's own
- * colours (even its error red, pale in dark mode) were too easy to miss (user, 2026-10-09).
- */
-@Composable
-private fun pickedGreen(): Color = if (isDarkSurface()) Color(0xFF6FCF7F) else Color(0xFF2E7D32)
-
-@Composable
-private fun editedRed(): Color = if (isDarkSurface()) Color(0xFFFF6B6B) else Color(0xFFC62828)
-
-@Composable
-private fun isDarkSurface(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
 /** About three entries (each at least 56 dp: the 48 dp buttons plus padding), then the list scrolls. */
 private val LIST_MAX_HEIGHT = 56.dp * 3 + 2.dp + 16.dp
 
@@ -317,7 +305,7 @@ private fun PickListPanel(state: TextPickState, modifier: Modifier) {
                     Text(
                         text = state.picks.textOf(pick, state.blocks),
                         style = pickTextStyle(),
-                        color = if (pick.edited != null) editedRed() else MaterialTheme.colorScheme.onSurface,
+                        color = if (pick.edited != null) editedColor() else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f).padding(vertical = 8.dp),
                     )
                     IconButton(onClick = { state.startEdit(pick.index) }) {

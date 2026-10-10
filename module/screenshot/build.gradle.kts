@@ -8,6 +8,7 @@ android {
 
 dependencies {
     implementation(project(":core:capture"))
+    implementation(project(":core:media"))
     implementation(project(":core:overlay"))
     implementation(project(":core:selection"))
     implementation(project(":core:ui"))

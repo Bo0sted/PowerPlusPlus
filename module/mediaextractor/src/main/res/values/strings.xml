@@ -1,0 +1,26 @@
+<resources>
+    <string name="module_media_extractor">Media extractor</string>
+    <string name="media_view_accessibility">Accessibility</string>
+    <string name="media_view_scan">Scan</string>
+    <string name="media_looking">Looking for media…</string>
+    <string name="media_scanning">Scanning…</string>
+    <string name="media_none_accessibility">No media detected. Try Scan</string>
+    <string name="media_none_scan">Scan found no media</string>
+    <string name="media_try_scan">Scan</string>
+    <string name="media_hint">Tap media to select it</string>
+    <plurals name="media_selected">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="media_copy">Copy</string>
+    <string name="media_save">Save</string>
+    <string name="media_retake">Retake</string>
+    <string name="media_copied">Copied</string>
+    <plurals name="media_saved">
+        <item quantity="one">Saved to Pictures/Power++</item>
+        <item quantity="other">Saved %d images to Pictures/Power++</item>
+    </plurals>
+    <string name="media_failed">Couldn\'t create the image</string>
+    <string name="media_capture_failed">Couldn\'t capture the screen</string>
+    <string name="media_blocked">This app blocks screenshots</string>
+</resources>

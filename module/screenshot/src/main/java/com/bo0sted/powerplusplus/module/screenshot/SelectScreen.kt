@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,7 @@ import com.bo0sted.powerplusplus.selection.SelectionShape
 import com.bo0sted.powerplusplus.selection.ShapeToggle
 import com.bo0sted.powerplusplus.selection.rememberSelectionGeometry
 import com.bo0sted.powerplusplus.ui.MessageBar
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import com.bo0sted.powerplusplus.selection.R as SelectionR
 
@@ -54,10 +56,12 @@ enum class ScreenshotAction { Copy, Save, Share, Edit }
 /**
  * Step 1 of Smart screenshot: the frozen screenshot with a selection to move and resize. The shape
  * toolbar floats above the selection, the action toolbar below it; both hide while dragging.
- * Tapping outside the selection cancels. Under the shape toolbar: Max, Default and — when
- * [onRetake] is given — Retake, which replaces the frozen capture with a fresh one.
+ * Tapping outside the selection cancels. Under the shape toolbar: Max, Default, Scan (rectangle
+ * only) and — when [onRetake] is given — Retake, which replaces the frozen capture with a fresh one.
  *
  * @param onAction receives the selection in screenshot pixels.
+ * @param onScan finds the next media region for the selection (repeated taps step through them);
+ *   offered only for the rectangle, since media are rectangular. It doesn't confirm anything.
  * @param notice a message shown at the bottom (a failure, or a confirmation before closing).
  * @param busy while an action runs: the toolbars hide and the selection can't be changed.
  */
@@ -68,6 +72,7 @@ internal fun SelectScreen(
     onCancel: () -> Unit,
     onRetake: (() -> Unit)?,
     retaking: Boolean,
+    onScan: suspend (Rect) -> Rect?,
     notice: String?,
     busy: Boolean,
 ) {
@@ -76,6 +81,8 @@ internal fun SelectScreen(
     var shape by remember { mutableStateOf(SelectionShape.Rectangle) }
     var selection by remember { mutableStateOf(geometry.default(SelectionShape.Rectangle)) }
     var dragging by remember { mutableStateOf(false) }
+    var scanning by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val viewSize = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
@@ -113,6 +120,18 @@ internal fun SelectScreen(
             FloatingToolbar(anchor = onScreen, area = area, above = true, stackIndex = 1) {
                 TextButton(onClick = { selection = geometry.max(shape, selection) }) { Text(stringResource(SelectionR.string.selection_size_max)) }
                 TextButton(onClick = { selection = geometry.default(shape) }) { Text(stringResource(SelectionR.string.selection_size_default)) }
+                if (shape == SelectionShape.Rectangle) {
+                    TextButton(
+                        enabled = !scanning,
+                        onClick = {
+                            scanning = true
+                            scope.launch {
+                                onScan(selection)?.let { selection = it }
+                                scanning = false
+                            }
+                        },
+                    ) { Text(stringResource(R.string.screenshot_scan)) }
+                }
                 if (onRetake != null) {
                     TextButton(onClick = onRetake, enabled = !retaking) { Text(stringResource(R.string.screenshot_retake)) }
                 }
