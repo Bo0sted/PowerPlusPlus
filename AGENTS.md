@@ -4,7 +4,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-**Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Then built the **Media extractor** module and a **Scan** button in Smart screenshot (§3.7). Committed locally; not pushed yet (§10).
+**Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Then built the **Media extractor** module and a **Scan** button in Smart screenshot (§3.7). Pushed by the user on 2026-10-10 (§10).
 
 - **State:** every v1 module is built and **confirmed working by the user on-device**:
   - the panel and trigger (§2)
@@ -524,7 +524,7 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
 **Remote:** `origin` = `git@github.com:Bo0sted/PowerPlusPlus.git` (SSH, private repo `github.com/Bo0sted/PowerPlusPlus`). `main` tracks `origin/main`; first pushed 2026-10-08.
-- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09. Session 3's commits are local only until the user asks to push.
+- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09. Session 3's commits (`dafe3fc` to `44c90f9`) were pushed by the user on 2026-10-10.
 - The user's SSH key (`~/.ssh/github`) has a passphrase, so the agent can't push from its own shell (batch mode). Run `git push` in the user's terminal panel, where the user enters the passphrase themselves. Push only when the user says so.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
