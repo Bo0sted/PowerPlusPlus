@@ -4,7 +4,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-**Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Committed locally; not pushed yet (§10).
+**Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Then built the **Media extractor** module and a **Scan** button in Smart screenshot (§3.7). Committed locally; not pushed yet (§10).
 
 - **State:** every v1 module is built and **confirmed working by the user on-device**:
   - the panel and trigger (§2)
@@ -14,7 +14,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   - Smart screenshot, both the selection and the editor (§3.4); not re-checked since its selection moved to `:core:selection` (§10)
   - the activation screenshot and Retake (§3.5, §3.5b)
   - the OCR engine/model manager, with ORT telemetry disabled (§4)
-- **Next action:** wait for the user's next feature request. The user should still re-check Smart screenshot and Screen text on-device, including the new in-window messages (§10). The open question for the user is in §7 (Small model).
+- **Next action:** have the user try Media extractor and Smart screenshot's Scan on real apps (they mostly browse in **Firefox**), then tune `MediaScan`'s thresholds from what they report or from read-only `screencap`s of those screens (§3.7). The user should also still re-check Smart screenshot and Screen text, including the in-window messages (§10). The open question for the user is in §7 (Small model).
 - **How work is done here:**
   - Verify every API against AOSP or the pinned library source before relying on it. §11 lists what's already verified; don't re-research those.
   - Lint must stay at zero issues.
@@ -179,9 +179,9 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
     - `max()`: the whole image for a rectangle or strip; for a circle, the largest that fits (the short side), centred on the current selection and kept inside.
     - Default = `default(shape)`.
 - **Crop:** the circle uses an antialiased oval clip on a transparent ARGB bitmap (transparent corners, decided by the user).
-- **`ScreenshotOutput`:**
-  - **Copy/Share** write a PNG to `cacheDir/screenshots/`, served by the module's own FileProvider (`${applicationId}.screenshots`), and keep only the 5 newest files.
-  - **Save** writes to `Pictures/Power++` via MediaStore (`IS_PENDING`; no permission needed).
+- **`ImageOutput`** (in `:core:media` since 2026-10-09, shared with Media extractor; it was `ScreenshotOutput`):
+  - **Copy/Share** write a PNG to `cacheDir/screenshots/`, served by `:core:media`'s FileProvider (`${applicationId}.screenshots`, name kept so existing clipboard links still resolve), and keep only the 5 newest files.
+  - **Save** writes to `Pictures/Power++` via MediaStore (`IS_PENDING`; no permission needed). File names are timestamps that never repeat, even for several images saved in the same millisecond.
   - The Share chooser is started *before* the overlay closes. While our accessibility overlay is visible, `BackgroundActivityStartController` allows the start (`BAL_ALLOW_NON_APP_VISIBLE_WINDOW`; `WindowState` counts system-type windows ≥ `FIRST_SYSTEM_WINDOW` as non-app visible windows).
 - **Step 2: the editor** (`editor/` package), reached via **Edit**.
   - The crop is handed over in-process via `EditorSession` (bitmaps are too big for an Intent), then `EditorActivity` is started while the overlay is still visible (BAL), and the overlay closes.
@@ -280,6 +280,40 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - A circle.
 - Plus the editor tools from §3.4 (blur, pixelate, pen, …).
 
+### 3.7 Media extractor and Scan (user, 2026-10-09)
+
+**Implemented** as `:module:mediaextractor` (typeId `media_extractor`, "Media extractor", `usesActivationScreenshot = true`) on `:core:media`, plus a **Scan** button in Smart screenshot. Built, unit-tested and installed; **not yet tried by the user on-device**, and the scan thresholds have only been checked on synthetic images and one real (media-free) lock-screen capture.
+
+**How media are found** (the user asked "math or a model?"; decided: math):
+- **Accessibility** (`ScreenMediaFinder`): nodes whose class is `android.widget.ImageView`, `android.widget.Image`, `android.widget.ImageButton` or `android.widget.VideoView`, or whose view id (after the `/`) matches `exo_content_frame|video|player`. They must be visible, are clipped to their window, and need at least `MediaFinder.MIN_SIDE_DP` (72 dp) on each side, so icons and avatars drop out. Exact bounds, but it's the live tree, not the capture. Why each name: §11.
+- **Scan** (`MediaScan`, pixels only; no OCR, no model, no download):
+  - Why not a model: PP-OCR finds text, not pictures. Layout and UI-detector models are 50–200 MB, take seconds, are trained on other kinds of images, and some are AGPL (OmniParser). ML Kit needs Play Services. On-screen media are upright rectangles on app backgrounds, which is a geometry problem.
+  - Steps:
+    1. Shrink the capture to about 360 px wide (a quarter on the Pixel).
+    2. **Background** = flat regions touching the area's edge: neighbours within 6 per channel, within 12 of the region's first pixel (so gradients inside photos can't creep), and at least `minSide` pixels (so a 1 px divider counts, instead of joining what touches it).
+    3. Every other 8-connected component ≥ `minSide` both ways is a block. It counts as media if it has ≥ 24 distinct colours (4 bits per channel), or no colour covers more than half of it. Buttons and text-only cards fail both.
+    4. A block whose outline is ≥ 50 % background-flat (a card with padding, a letterboxed player) is split again the same way, up to depth 3. The card and the picture inside are both kept; tapping (smallest under the finger) or cycling chooses.
+    5. Edges are snapped at full resolution to the strongest row/column contrast within ±2× the shrink factor, which undoes the rounding.
+  - Measured: 15 ms at working size on the PC for a 1344×2992 lock screen (found nothing, correctly). Not yet timed on the phone.
+  - Known limits: a picture whose edge matches the app around it (a white meme on a white app, a black-and-white comic on white) has no edge to find. A full-bleed photo with flat sky touching the screen edge can lose that strip. Apps that draw everything themselves (games) report nothing through accessibility either.
+- `MediaFinder.all` = accessibility + scan, near-duplicates removed (IoU ≥ 0.9, first kept, so app bounds win). `distinctRegions`, `orderedAround`, `regionAt` and `RegionCycle` are pure and unit-tested.
+
+**Media extractor UI** (`MediaScreen`, the user's design):
+- The frozen capture with a box around each region. Tapping a box toggles it (green, `pickedColor()`); tapping elsewhere does nothing (a scan mustn't be lost to a stray tap). Back and × close.
+- Bottom, from the top (`OverlayBottomBars`):
+  1. a notice (`MessageBar`) for confirmations and failures
+  2. the status/actions bar: "Looking for media…"/"Scanning…" with a spinner; in Accessibility with no media, "No media detected. Try Scan" with a **Scan** button (the × is always there); in Scan with none, "Scan found no media"; with nothing selected, "Tap media to select it"; otherwise "N selected" with **Copy** (exactly one selected) and **Save** (any number)
+  3. the view row (segmented): **Accessibility** (default, read when the window opens) · **Scan** (runs the first time it's opened, then cached)
+  4. **Retake** (Scan view only, Android 14+): recaptures under the overlay (§3.5b) and rescans
+- Switching view clears the selection.
+- **Copy** puts the one crop on the clipboard and closes ("Copied" first only on API ≤ 32). **Save** writes each crop as its own PNG, shows "Saved to Pictures/Power++" or "Saved N images to Pictures/Power++" for 1.5 s, then closes. A failure keeps the window open.
+- What's saved is the capture cut to each region: screen resolution, and for a video, the frame that was on screen. Accessibility doesn't expose image files or URLs.
+
+**Smart screenshot Scan** (user: same detection, but it only resizes the selection and doesn't confirm; rectangle only):
+- The button sits in the Max/Default/Retake row and shows only while the shape is Rectangle.
+- The first tap finds `MediaFinder.all` for the current image (cached; Retake clears it). It moves the selection to the smallest region under the selection's centre. Each further tap steps to the next region (larger ones around the centre, then the rest, nearest first), wrapping around. Moving or resizing the selection starts over from there (`RegionCycle`).
+- No media → "No media found" in the window's notice.
+
 ## 4. OCR engines and models
 
 **Implemented 2026-10-08** as `:core:ocr` plus the settings section "OCR engine and models" (`app/settings/OcrSection.kt`). **Verified on-device** (the user downloaded both components; see §10). The pipeline and module are in §3.3.
@@ -345,15 +379,16 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 | Module | Role |
 |---|---|
 | `build-logic` | Included build with the convention plugins: `powerpp.android.application`, `powerpp.android.library`, `powerpp.android.compose`, `powerpp.hilt`, `powerpp.serialization`, `powerpp.panel.module`. Modules apply plugins **only** through these; AGP, KSP and the rest are on build-logic's classpath, not resolvable by id directly. |
-| `:core:ui` | `PowerTheme`; `MessageBar` (a rounded message bar with optional ×), `MessageScreen` (a window showing only a message; tap anywhere closes) and `MESSAGE_CLOSE_DELAY_MS` (1.5 s, how long a confirmation shows before its window closes). These replace toasts everywhere. |
+| `:core:ui` | `PowerTheme`; the overlay building blocks `OverlayBar` (the rounded bottom pill; swallows taps), `OverlayBottomBars` (stacks bars at the bottom centre), `OverlayBarText`, `OverlayCloseButton`, `MessageBar`, `MessageScreen` (a window showing only a message; tap anywhere closes) and `MESSAGE_CLOSE_DELAY_MS` (1.5 s, how long a confirmation shows before its window closes); `pickedColor()`/`editedColor()` (§3.3's green and red). Messages replace toasts everywhere. |
 | `:core:module` | The module SPI: `PanelModule` (sealed; `usesActivationScreenshot` defaults to false), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService`, a scope tied to the connection, and `activationScreenshot`), `ActivationScreenshot` (single-owner holder: `take()` hands the bitmap over and the caller must recycle it; `replace()` recycles the old one), `ModuleRegistry` |
 | `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. |
-| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing); an optional `onBackRequest` takes Back instead. `setCompact` shrinks it to its content at the top (for keyboard input). Single use: create a new one each time. |
-| `:core:capture` | `ScreenImage` (`toSoftware`, `looksBlocked`; unit-tested) and `ScreenRecapture` (Retake). Used by Smart screenshot and OCR text. |
+| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing); an optional `onBackRequest` takes Back instead. `setCompact` shrinks it to its content at the top (for keyboard input). Single use: create a new one each time. `showMessageWindow(service, message)` opens a window that only shows a message. |
+| `:core:capture` | `ScreenImage` (`toSoftware`, `looksBlocked`; unit-tested), `ScreenRecapture` (Retake) and `forEachScreenNode` (walks every app window's accessibility nodes, skipping overlays, the IME and our own package; used by Screen text and `ScreenMediaFinder`). |
+| `:core:media` | Finding and saving on-screen media (§3.7): `MediaFinder` (`accessibility`, `scan`, `all`, `MIN_SIDE_DP`), `ScreenMediaFinder`, `MediaScan` (unit-tested), the region helpers in `MediaRegions.kt` (unit-tested), and `ImageOutput` (copy/share/save PNGs) with the FileProvider. Used by Smart screenshot and Media extractor. |
 | `:core:selection` | `SelectionGeometry` (unit-tested), `SelectionShape`, `SelectionCanvas` (frozen image, scrim, frame, handles, move/resize gestures; state hoisted), `ShapeToggle`, `rememberSelectionGeometry`, and the shape and Max/Default labels. Used by Smart screenshot and OCR text. |
 | `:core:ocr` | The engine/model manager (§4) and the pipeline (§3.3): `PpOcr`, `DbPostProcess`, `CtcDecoder` (pure parts unit-tested), `TextRecognizer`. |
 | `:core:textpick` | Shared text-selection overlay, used by Screen text and OCR text. `TextBlock(text, IntRect screen px)`; `normalizeTextBlocks` drops container summaries (blocks enclosing a smaller block), blanks and duplicates, and sorts in reading order. `hitTest` picks the smallest block under the tap, with 10dp slop. `TextPickState` + `PickList` (the selection list with edits; unit-tested), `ZoomViewport` (pinch-zoom maths; unit-tested), `TextPickScreen` (list panel, edit card, optional background with pinch-zoom, `closeOnTapOutside`), `showTextPick(service, blocks)`, `copyToClipboard`. |
-| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`. |
+| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`, `:module:mediaextractor`. |
 | `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`), and the settings UI (`settings/`: setup checklist, layout editor, appearance). |
 
 ### Adding a module type
@@ -374,7 +409,7 @@ Nothing else changes.
 
 **Commands:**
 - `./gradlew :app:assembleDebug` builds the debug APK.
-- Unit tests: `./gradlew :core:data:testDebugUnitTest :core:textpick:testDebugUnitTest :core:capture:testDebugUnitTest :core:selection:testDebugUnitTest :core:ocr:testDebugUnitTest :module:screenshot:testDebugUnitTest :module:ocrtext:testDebugUnitTest` (all pass, 2026-10-09).
+- Unit tests: `./gradlew :core:data:testDebugUnitTest :core:textpick:testDebugUnitTest :core:capture:testDebugUnitTest :core:selection:testDebugUnitTest :core:ocr:testDebugUnitTest :core:media:testDebugUnitTest :module:screenshot:testDebugUnitTest :module:ocrtext:testDebugUnitTest` (all pass, 2026-10-09).
 - Lint for everything: `./gradlew lintDebug`.
 - Install on the device: `./gradlew :app:installDebug` (needs `adb connect <ip:port>` first).
 - `./gradlew :app:lintDebug` (and `:<module>:lintDebug`) runs lint. Keep lint at zero issues.
@@ -440,6 +475,7 @@ All decisions are from 2026-10-08.
 - **OCR engine settings** (2026-10-08): CPU, 4 threads. XNNPACK crashed (§3.3).
 - **OCR model in use:** PP-OCRv6 Medium; the user's XGesture Medium speed (~10 s) is the reference.
 - **Visual feedback** (user, 2026-10-09): an action must open its window at once; long work shows progress in it. Messages go in the window, not toasts.
+- **Media extractor** (user, 2026-10-09): a module with an Accessibility view (default) and a Scan view; Scan is pixel geometry, not OCR or a model (§3.7). Smart screenshot gets the same detection as a Scan button that only resizes the rectangle. Shared code lives in `:core:media`; no duplicated blocks across modules (user's requirement).
 - **No toasts anywhere** (user, 2026-10-09): the features can only be used while an overlay is up, so their messages belong in it. Confirmations show for 1.5 s, then the window closes; failures keep it open.
 - **Selection list + editing** (user, 2026-10-09): in the shared results screen, so Screen text has it too.
 - **OCR results zoom** (user, 2026-10-09): pinch-zoom like a photo, the boxes zooming with the image, with Reset zoom just above the selection list.
@@ -483,12 +519,12 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 - **OCR text** (§3.3), 2026-10-09: resizable selection, progress, results over the frozen capture, the selection list with editing (the keyboard appears in compact mode), the 3-entry list, pinch-zoom and Reset zoom.
 - **Lint:** zero issues across modules. All unit tests pass.
 
-**Session 3 (2026-10-09):** in-window messages replace every toast (Smart screenshot, its editor, Screen text, the "Copied" confirmation on API ≤ 32); the unused first-design OCR strings (`ocr_hint_cursor`, `ocr_hint_drag`, `ocr_reset`) were removed. Built, unit-tested, lint clean and installed on the phone; **not yet checked by the user on-device.**
+**Session 3 (2026-10-09):** in-window messages replace every toast (Smart screenshot, its editor, Screen text, the "Copied" confirmation on API ≤ 32); the unused first-design OCR strings (`ocr_hint_cursor`, `ocr_hint_drag`, `ocr_reset`) were removed. Built, unit-tested, lint clean and installed on the phone; **not yet checked by the user on-device.** Then Media extractor and Smart screenshot's Scan (§3.7), with the shared `:core:media`, `OverlayBar` family and `forEachScreenNode`; Screen text and OCR text were moved onto those shared pieces (no behaviour change intended). Same status: built, tested, lint clean, installed, not yet checked by the user.
 
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
 **Remote:** `origin` = `git@github.com:Bo0sted/PowerPlusPlus.git` (SSH, private repo `github.com/Bo0sted/PowerPlusPlus`). `main` tracks `origin/main`; first pushed 2026-10-08.
-- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09. Session 3's commit is local only until the user asks to push.
+- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09. Session 3's commits are local only until the user asks to push.
 - The user's SSH key (`~/.ssh/github`) has a passphrase, so the agent can't push from its own shell (batch mode). Run `git push` in the user's terminal panel, where the user enters the passphrase themselves. Push only when the user says so.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
@@ -534,6 +570,12 @@ Re-verify only if the target platform changes.
 - `WindowState.canBeImeTarget` doesn't exclude accessibility overlays, so a focusable overlay can take text input.
 - `DisplayContent.shouldImeAttachedToApp` lifts the keyboard above its target only when the target has an `ActivityRecord`, so it is never lifted above an overlay.
 - Hence `OverlayWindow.setCompact` while editing. Confirmed working on-device.
+
+**Media class names in the accessibility tree** (2026-10-09; AOSP `main`, androidx-main, Chromium `main`, Firefox `main`):
+- `ImageView.getAccessibilityClassName` → `android.widget.ImageView`; `VideoView` → `android.widget.VideoView`. `SurfaceView` and `TextureView` don't override it, so they report `View.getAccessibilityClassName` = `android.view.View`.
+- Compose: `Role.Image.toLegacyClassName()` = `android.widget.ImageView` (`SemanticsUtils.android.kt`), but foundation's `Image` sets `Role.Image` only when `contentDescription != null` (`Image.kt`), and the delegate applies the class only to leaf or merging nodes.
+- Chrome/WebView: images are `android.widget.Image` (`kAXImageClassname`); clickable images `android.widget.ImageButton` (`BrowserAccessibilityAndroid::GetClassName`).
+- Firefox (GeckoView): `CLASSNAMES[CLASSNAME_IMAGE]` = `android.widget.Image` (`SessionAccessibility.java`), used for the roles GRAPHIC, DIAGRAM, CANVAS, IMAGE_MAP and MATHML_GLYPH (`accessible/base/RoleMap.inc`).
 
 **ONNX Runtime 1.30 Java:** on Android, `OnnxRuntime.init()` only `loadLibrary`s `onnxruntime4j_jni` (see §4).
 - API checked in the pinned AAR: `OnnxTensor.createTensor(env, FloatBuffer, long[])`, `OrtSession.run(Map)`, `SessionOptions.setIntraOpNumThreads`/`addXnnpack`/`addConfigEntry`.
