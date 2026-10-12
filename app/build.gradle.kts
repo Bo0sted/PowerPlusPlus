@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":module:screenshot"))
     implementation(project(":module:ocrtext"))
     implementation(project(":module:mediaextractor"))
+    implementation(project(":module:newreminder"))
 
     // Assistant commands, likewise.
     implementation(project(":command:reminders"))

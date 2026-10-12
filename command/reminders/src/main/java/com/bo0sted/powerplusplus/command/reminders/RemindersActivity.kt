@@ -1,9 +1,11 @@
 package com.bo0sted.powerplusplus.command.reminders
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +52,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -73,10 +74,22 @@ import javax.inject.Inject
 /** Upcoming reminders, read from the ntfy server each time it's shown: view, edit, delete, add. */
 @AndroidEntryPoint
 class RemindersActivity : ComponentActivity() {
+    private val viewModel: RemindersViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { PowerTheme { RemindersScreen(onBack = ::finish) } }
+        // Opened for a new reminder: the same as tapping New reminder (once, not again after rotation).
+        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_NEW, false)) viewModel.create()
+        setContent { PowerTheme { RemindersScreen(onBack = ::finish, viewModel = viewModel) } }
+    }
+
+    companion object {
+        private const val EXTRA_NEW = "new_reminder"
+
+        /** Upcoming reminders, with the New reminder modal already open. */
+        fun newReminderIntent(context: Context): Intent =
+            Intent(context, RemindersActivity::class.java).putExtra(EXTRA_NEW, true)
     }
 }
 
@@ -140,7 +153,7 @@ internal class RemindersViewModel @Inject constructor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RemindersScreen(onBack: () -> Unit, viewModel: RemindersViewModel = hiltViewModel()) {
+private fun RemindersScreen(onBack: () -> Unit, viewModel: RemindersViewModel) {
     // Every time the screen is shown: the server is the only copy.
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.load() }
     var confirmDelete by remember { mutableStateOf<Reminder?>(null) }

@@ -421,6 +421,9 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **Edit** opens the same `ReminderDraft` in the same `CommandModal`, titled "Edit reminder", with early reminders shown in their largest exact unit. Confirm republishes under IDs 0…k, which replaces those messages, and deletes the reminder's other old IDs.
 - **Delete** (asks first) sends `DELETE /<topic>/<id>` for each of its IDs.
 - **New reminder** opens an empty draft at the current date and time (the user's choice, since nothing was spoken). It needs moving forward before Confirm enables.
+- **New reminder module** (user, 2026-10-12): `:module:newreminder` (typeId `new_reminder`, "New reminder"), an ordinary panel module wired to that same button.
+  - It starts `RemindersActivity.newReminderIntent`, whose extra makes the activity call `viewModel.create()` once (not again after rotation). So the same modal opens, with the same defaults and rules, over the list.
+  - The panel is already closed when a module runs. The start is allowed because `AccessibilityServiceConnection` binds with `BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS` (§11). **Not yet tried on-device.**
 - The modal is a Compose `Dialog` there: activities allow dialogs, and the keyboard resizes the window normally. Back steps back within the draft, then closes the modal; taps outside are ignored.
 - **Shared with the panel:** `CommandModalState` (draft, confirming, error; `open`/`cancel`/`confirm(scope)`/`onBack`) and the `CommandModal` card live in `:core:assistant`. The panel wraps the card with focus tracking for compact mode.
 
@@ -510,7 +513,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 | `:core:assistant` | The assistant (§3.8): the `AssistantCommand`/`CommandDraft` SPI, `AssistantCommands` (registry and switches), `Assistant`/`AssistantSession`, `VoiceCapture` + `Endpointer` (unit-tested), and `AssistantOverlay` (the tappable voice wave and the command modal). Depends on nothing command-specific. |
 | `:core:textpick` | Shared text-selection overlay, used by Screen text and OCR text. `TextBlock(text, IntRect screen px)`; `normalizeTextBlocks` drops container summaries (blocks enclosing a smaller block), blanks and duplicates, and sorts in reading order. `hitTest` picks the smallest block under the tap, with 10dp slop. `TextPickState` + `PickList` (the selection list with edits; unit-tested), `ZoomViewport` (pinch-zoom maths; unit-tested), `TextPickScreen` (list panel, edit card, optional background with pinch-zoom, `closeOnTapOutside`), `showTextPick(service, blocks)`, `copyToClipboard`. |
 | `:command:*` | One per assistant command. They apply `powerpp.assistant.command` and bind themselves with `@Binds @IntoSet AssistantCommand`. Currently: `:command:reminders`. |
-| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`, `:module:mediaextractor`. |
+| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`, `:module:mediaextractor`, `:module:newreminder` (opens `:command:reminders`' New reminder). |
 | `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`; the controller wraps the panel in `AssistantOverlay`), and the settings UI (`settings/`: setup checklist, layout editor, appearance, OCR, Whisper assistant; `ComponentRow` is shared by the download sections). |
 
 ### Adding a module type
@@ -632,6 +635,7 @@ All decisions are from 2026-10-08.
 - **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
 - **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
+- **New reminder module** (user, 2026-10-12): a normal panel module that triggers Upcoming reminders' New reminder button (same modal, same rules).
 - **Reminder priority** (user, 2026-10-12): pick it from a row of buttons in the modal, Max by default for every notification.
 - **Upcoming reminders come only from ntfy** (user, 2026-10-12): Power++ stores nothing and queries the server each time the list opens. Editing and deleting go through sequence IDs; new and edited reminders use the same modal as spoken ones; a new one starts at the current date and time.
 - **Reuse over duplication** (user): the OCR downloader became `:core:download`, the panel's JSON DataStore became `jsonDataStore`, the OCR component row became `ComponentRow`, and the backdrop text style moved to `:core:ui`.
@@ -771,7 +775,7 @@ Re-verify only if the target platform changes.
 - AGP packages MODULE libraries of every built target. Its `targets` filter keeps only linked dependencies, so it would drop the backends.
 
 **Microphone from the accessibility service** (AOSP `main`):
-- `AccessibilityServiceConnection` binds the service with `BIND_INCLUDE_CAPABILITIES` (plus `BIND_FOREGROUND_SERVICE_WHILE_AWAKE`).
+- `AccessibilityServiceConnection` binds the service with `BIND_INCLUDE_CAPABILITIES` (plus `BIND_FOREGROUND_SERVICE_WHILE_AWAKE` and `BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS`; the last lets modules start activities after the panel has closed).
 - `OomAdjuster` passes the client's (system_server's) while-in-use capabilities through that flag.
 - So the process should be allowed to record without a foreground service. **Unconfirmed on-device.**
 
