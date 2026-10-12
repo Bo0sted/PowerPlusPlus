@@ -35,6 +35,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -45,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.bo0sted.powerplusplus.assistant.CommandDraft
+import com.bo0sted.powerplusplus.ntfy.NtfyPriority
 import com.bo0sted.powerplusplus.ntfy.NtfyRepository
 import java.time.Duration
 import java.time.Instant
@@ -73,6 +75,7 @@ internal class ReminderDraft(
     private var date by mutableStateOf(reminder.time.toLocalDate())
     private var time by mutableStateOf(reminder.time.toLocalTime())
     private val early = mutableStateListOf<EarlyReminder>().apply { addAll(reminder.early.map(EarlyReminder::of)) }
+    private var priority by mutableIntStateOf(reminder.priority)
     private var page by mutableStateOf(Page.Form)
 
     private enum class Page { Form, Date, Time }
@@ -128,6 +131,7 @@ internal class ReminderDraft(
                 text = text.trim(),
                 time = LocalDateTime.of(date, time),
                 early = early.mapNotNull { it.duration },
+                priority = priority,
             ),
         )
     }
@@ -158,6 +162,18 @@ internal class ReminderDraft(
                 OutlinedButton(onClick = { page = Page.Time }) {
                     Icon(Icons.Rounded.Schedule, contentDescription = null)
                     Text(time.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)))
+                }
+            }
+
+            Text(stringResource(R.string.reminder_priority), style = MaterialTheme.typography.titleSmall)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                NtfyPriority.ALL.forEachIndexed { index, level ->
+                    SegmentedButton(
+                        selected = priority == level,
+                        onClick = { priority = level },
+                        shape = SegmentedButtonDefaults.itemShape(index, NtfyPriority.ALL.count()),
+                        icon = {},
+                    ) { Text(stringResource(PRIORITY_LABELS[index]), maxLines = 1) }
                 }
             }
 
@@ -254,6 +270,15 @@ internal class ReminderDraft(
     private companion object {
         /** ntfy refuses scheduled messages less than 10 s ahead (its `message-delay-min`). */
         const val MIN_DELAY_SECONDS = 10L
+
+        /** For [NtfyPriority.MIN] to [NtfyPriority.MAX], in order. */
+        val PRIORITY_LABELS = listOf(
+            R.string.reminder_priority_min,
+            R.string.reminder_priority_low,
+            R.string.reminder_priority_default,
+            R.string.reminder_priority_high,
+            R.string.reminder_priority_max,
+        )
     }
 }
 

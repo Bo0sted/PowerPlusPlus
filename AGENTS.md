@@ -398,8 +398,12 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **Modal:**
   - Text, date and time (pages with M3 `DatePicker`/`TimePicker`).
   - **Unlimited early reminders:** each is an amount plus minutes/hours/days ("Reminder coming up in 2 hours").
+  - **Priority** (user, 2026-10-12): a row of buttons for ntfy's five priorities, Min · Low · Default · High · Max, with **Max selected by default**. It applies to the reminder and its early reminders.
+    - ntfy's levels are 1–5 (`util.ParsePriority`: min, low, default, high, max/urgent).
+    - Polled messages omit the field when none was set, so a reminder scheduled before priorities existed reads back as Max; an explicit Default comes back as 3.
   - Confirm is disabled, with the reason, if the text is empty, the time is less than 10 s ahead (ntfy's minimum), it's past the server's limit, or an early reminder is invalid or in the past.
 - **Sending:** one scheduled JSON publish per notification (`delay` = Unix seconds).
+  - Every message carries the chosen `priority`.
   - The main notification is titled "Reminder" (tag `alarm_clock`); early ones "Reminder coming up in …" (`hourglass_flowing_sand`).
   - Sequence IDs `powerpp-<id>-<n>`, so confirming again after a partial failure replaces instead of duplicating.
   - Power++ keeps no reminder list, alarms or notifications of its own (the user: ntfy handles notifications, and Power++ stores nothing).
@@ -531,7 +535,7 @@ The settings list, the switch and the modal pick it up automatically.
 
 **Commands:**
 - `./gradlew :app:assembleDebug` builds the debug APK.
-- Unit tests: `./gradlew testDebugUnitTest` (90 tests, all pass, 2026-10-12).
+- Unit tests: `./gradlew testDebugUnitTest` (91 tests, all pass, 2026-10-12).
 - **First checkout:** `git submodule update --init` fetches whisper.cpp (`third_party/whisper.cpp`, pinned to v1.9.5). The first build compiles it for three ABIs (a few minutes); later builds reuse it.
 - Lint for everything: `./gradlew lintDebug`.
 - Install on the device: `./gradlew :app:installDebug` (needs `adb connect <ip:port>` first).
@@ -625,6 +629,7 @@ All decisions are from 2026-10-08.
 - **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
 - **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
+- **Reminder priority** (user, 2026-10-12): pick it from a row of buttons in the modal, Max by default for every notification.
 - **Upcoming reminders come only from ntfy** (user, 2026-10-12): Power++ stores nothing and queries the server each time the list opens. Editing and deleting go through sequence IDs; new and edited reminders use the same modal as spoken ones; a new one starts at the current date and time.
 - **Reuse over duplication** (user): the OCR downloader became `:core:download`, the panel's JSON DataStore became `jsonDataStore`, the OCR component row became `ComponentRow`, and the backdrop text style moved to `:core:ui`.
 

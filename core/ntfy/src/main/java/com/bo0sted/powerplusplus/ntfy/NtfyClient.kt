@@ -18,6 +18,8 @@ data class NtfyMessage(
     val message: String,
     val title: String? = null,
     val tags: List<String>? = null,
+    /** 1 (min) to 5 (max); see [NtfyPriority]. */
+    val priority: Int? = null,
     /** Unix seconds; ntfy holds the message until then ("scheduled delivery"). */
     val delay: String? = null,
     /** Publishing again with the same ID replaces a scheduled message, so retries never duplicate. */
@@ -32,8 +34,17 @@ data class NtfyReceived(
     val time: Long,
     val message: String = "",
     val title: String = "",
+    /** 0 when none was set (ntfy omits it then; an explicit 3 is returned as 3). */
+    val priority: Int = 0,
     @SerialName("sequence_id") val sequenceId: String? = null,
 )
+
+/** ntfy's message priorities (`util.ParsePriority` in the server): 1 min … 5 max ("urgent"). */
+object NtfyPriority {
+    const val MIN = 1
+    const val MAX = 5
+    val ALL = MIN..MAX
+}
 
 /** Something the server refused, with its own explanation; or a network failure ([code] null). */
 class NtfyException(message: String, val code: Int? = null, cause: Throwable? = null) : IOException(message, cause)

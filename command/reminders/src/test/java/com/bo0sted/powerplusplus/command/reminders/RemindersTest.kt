@@ -10,8 +10,8 @@ import java.time.ZoneOffset
 class RemindersTest {
 
     private val now = 1_000_000L
-    private fun message(id: String?, time: Long, text: String = "Call Mom", event: String = "message") =
-        NtfyReceived(event = event, time = time, message = text, sequenceId = id)
+    private fun message(id: String?, time: Long, text: String = "Call Mom", event: String = "message", priority: Int = 5) =
+        NtfyReceived(event = event, time = time, message = text, priority = priority, sequenceId = id)
 
     @Test
     fun groupsScheduledMessagesIntoReminders() {
@@ -20,7 +20,7 @@ class RemindersTest {
                 message("powerpp-aaaaaaaaaaaa-2", now + 3_600),
                 message("powerpp-aaaaaaaaaaaa-0", now + 7_200),
                 message("powerpp-aaaaaaaaaaaa-1", now + 7_200 - 600),
-                message("powerpp-bbbbbbbbbbbb-0", now + 60, "Stretch"),
+                message("powerpp-bbbbbbbbbbbb-0", now + 60, "Stretch", priority = 0), // Scheduled without a priority.
             ),
             now,
             ZoneOffset.UTC,
@@ -30,6 +30,13 @@ class RemindersTest {
         assertEquals(LocalDateTime.ofEpochSecond(now + 7_200, 0, ZoneOffset.UTC), callMom.time)
         assertEquals(listOf(Duration.ofMinutes(10), Duration.ofHours(1)), callMom.early)
         assertEquals((0..2).map { "powerpp-aaaaaaaaaaaa-$it" }, callMom.sequenceIds)
+        assertEquals(listOf(5, 5), reminders.map { it.priority })
+    }
+
+    @Test
+    fun keepsAChosenPriority() {
+        val reminders = Reminders.group(listOf(message("powerpp-ffffffffffff-0", now + 60, priority = 3)), now, ZoneOffset.UTC)
+        assertEquals(3, reminders.single().priority)
     }
 
     @Test

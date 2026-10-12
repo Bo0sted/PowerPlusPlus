@@ -4,6 +4,7 @@ import android.content.Context
 import com.bo0sted.powerplusplus.ntfy.NtfyClient
 import com.bo0sted.powerplusplus.ntfy.NtfyException
 import com.bo0sted.powerplusplus.ntfy.NtfyMessage
+import com.bo0sted.powerplusplus.ntfy.NtfyPriority
 import com.bo0sted.powerplusplus.ntfy.NtfyReceived
 import com.bo0sted.powerplusplus.ntfy.NtfyRepository
 import com.bo0sted.powerplusplus.ntfy.NtfyServer
@@ -19,7 +20,7 @@ import javax.inject.Singleton
 
 /**
  * A reminder: its main notification at [time] plus one early notification per entry of [early]
- * (how long before). [sequenceIds] are the scheduled messages it has on the server (none yet for a
+ * (how long before), all with [priority]. [sequenceIds] are the scheduled messages it has on the server (none yet for a
  * new one).
  */
 internal data class Reminder(
@@ -27,6 +28,8 @@ internal data class Reminder(
     val text: String,
     val time: LocalDateTime,
     val early: List<Duration> = emptyList(),
+    /** ntfy priority for the reminder and its early reminders; max unless changed. */
+    val priority: Int = NtfyPriority.MAX,
     val sequenceIds: List<String> = emptyList(),
 ) {
     val isScheduled: Boolean get() = sequenceIds.isNotEmpty()
@@ -65,6 +68,7 @@ internal class Reminders @Inject constructor(
                 title = context.getString(R.string.reminder_notification_title),
                 message = reminder.text,
                 tags = listOf("alarm_clock"),
+                priority = reminder.priority,
                 delay = NtfyClient.delayAt(at),
                 sequenceId = sequenceId(reminder.id, 0),
             ),
@@ -74,6 +78,7 @@ internal class Reminders @Inject constructor(
                 title = context.getString(R.string.reminder_early_title, formatDuration(context, before)),
                 message = reminder.text,
                 tags = listOf("hourglass_flowing_sand"),
+                priority = reminder.priority,
                 delay = NtfyClient.delayAt(at.minus(before)),
                 sequenceId = sequenceId(reminder.id, index + 1),
             )
@@ -115,6 +120,8 @@ internal class Reminders @Inject constructor(
                         text = main.message,
                         time = LocalDateTime.ofInstant(Instant.ofEpochSecond(main.time), zone),
                         early = byIndex.filterKeys { it > 0 }.toSortedMap().values.map { Duration.ofSeconds(main.time - it.time) },
+                        // None: scheduled before Power++ set priorities. Shown (and re-saved) as max, like every new reminder.
+                        priority = main.priority.takeIf { it in NtfyPriority.ALL } ?: NtfyPriority.MAX,
                         sequenceIds = byIndex.keys.sorted().map { sequenceId(id, it) },
                     )
                 }

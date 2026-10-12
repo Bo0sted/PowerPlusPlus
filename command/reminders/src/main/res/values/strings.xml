@@ -7,6 +7,12 @@
     <string name="reminder_title">Reminder</string>
     <string name="reminder_edit_title">Edit reminder</string>
     <string name="reminder_text_label">Remind me to</string>
+    <string name="reminder_priority">Priority</string>
+    <string name="reminder_priority_min">Min</string>
+    <string name="reminder_priority_low">Low</string>
+    <string name="reminder_priority_default">Default</string>
+    <string name="reminder_priority_high">High</string>
+    <string name="reminder_priority_max">Max</string>
     <string name="reminder_early_heading">Early reminders</string>
     <string name="reminder_early_add">Add early reminder</string>
     <string name="reminder_early_remove">Remove early reminder</string>
