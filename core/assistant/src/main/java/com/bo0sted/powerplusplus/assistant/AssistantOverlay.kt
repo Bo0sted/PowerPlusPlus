@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -90,7 +90,10 @@ fun AssistantOverlay(
             }
         }
         // Always the last child, so the modal (and its focused field) survives switching to compact.
-        if (draft != null) PanelCommandModal(session, draft, compact)
+        // Centred within thumb reach; at the top while typing, where the shrunken window is.
+        if (draft != null) {
+            PanelCommandModal(session, draft, compact, Modifier.align(if (compact) Alignment.TopCenter else Alignment.Center))
+        }
     }
 }
 
@@ -191,9 +194,9 @@ private fun DrawScope.wavePath(cycles: Float, phase: Float, amplitude: Float): P
     return path
 }
 
-/** The [CommandModal] at the top of the panel; it tells the session when a text field has focus. */
+/** The [CommandModal] over the panel; it tells the session when a text field has focus. */
 @Composable
-private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, compact: Boolean) {
+private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, compact: Boolean, modifier: Modifier) {
     val focusManager = LocalFocusManager.current
     LaunchedEffect(session.clearFocusRequests) { if (session.clearFocusRequests > 0) focusManager.clearFocus() }
     // The display's height, not the window's: the window shrinks to the modal while typing.
@@ -202,8 +205,8 @@ private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, co
         state = session.modal,
         draft = draft,
         onConfirm = session::confirmDraft,
-        modifier = Modifier
-            .statusBarsPadding()
+        modifier = modifier
+            .systemBarsPadding() // Not the keyboard inset: while typing, the keyboard is below this window.
             .padding(16.dp)
             .fillMaxWidth()
             // Compact: leave the lower half for the keyboard.

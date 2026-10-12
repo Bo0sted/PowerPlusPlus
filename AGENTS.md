@@ -377,8 +377,8 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - **Tap to start over:** each listen-and-transcribe cycle runs in its own job (`AssistantSession.onWaveTap` cancels it), and the loop starts the next one. A transcription already inside whisper.cpp can't be interrupted, so it finishes in the background and its result is ignored. `SpeechModel` is synchronized, so the next transcription waits for it. Interrupting it would need whisper's `abort_callback` wired through JNI.
 - The model loads in parallel with the first utterance and is freed when the panel closes (after any running transcription).
 - The first active command whose `draftFor(transcript, now)` returns a draft wins. Listening pauses while the modal is open.
-- **Modal:** a card at the top over a scrim; the scrim swallows taps so a command isn't lost.
-  - While a text field has focus, the window goes compact (`OverlayWindow.setCompact`, which now also drops the dim/blur, since that would cover the keyboard) and only the card is drawn. The card stays at the same place in the composition, so focus survives.
+- **Modal:** a card **centred** over a scrim, within thumb reach (user, 2026-10-12); the scrim swallows taps so a command isn't lost. It's padded for the system bars only: the keyboard inset would grow the compact window over the keyboard.
+  - While a text field has focus, the card moves to the top and the window goes compact (`OverlayWindow.setCompact`, which now also drops the dim/blur, since that would cover the keyboard) and only the card is drawn. The card stays at the same place in the composition, so focus survives.
   - Back order: leave typing → the draft's own back (e.g. close a picker) → close the modal → close the panel.
   - Confirm runs `CommandDraft.confirm()`. On failure the error shows and the modal stays.
   - **No Compose dialogs or popups in overlays:** they need an activity window token. Date and time pickers are pages inside the card.
@@ -644,6 +644,7 @@ All decisions are from 2026-10-08.
 - **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
 - **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
+- **The panel's command modal is centred** (user, 2026-10-12), not at the top; only while typing does it sit at the top, above the keyboard.
 - **New reminder module** (user, 2026-10-12): a normal panel module that opens the same New reminder modal (same rules) **over the panel**, without opening the app.
 - **Reminder priority** (user, 2026-10-12): pick it from a row of buttons in the modal, Max by default for every notification.
 - **Upcoming reminders come only from ntfy** (user, 2026-10-12): Power++ stores nothing and queries the server each time the list opens. Editing and deleting go through sequence IDs; new and edited reminders use the same modal as spoken ones; a new one starts at the current date and time.
