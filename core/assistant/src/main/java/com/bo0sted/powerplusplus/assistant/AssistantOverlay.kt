@@ -90,7 +90,7 @@ fun AssistantOverlay(
             }
         }
         // Always the last child, so the modal (and its focused field) survives switching to compact.
-        // Centred within thumb reach; at the top while typing, where the shrunken window is.
+        // Centred within thumb reach; while typing, the window shrinks to the modal right above the keyboard.
         if (draft != null) {
             PanelCommandModal(session, draft, compact, Modifier.align(if (compact) Alignment.TopCenter else Alignment.Center))
         }

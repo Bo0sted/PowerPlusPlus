@@ -7,10 +7,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.FrameLayout
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
@@ -104,17 +106,23 @@ class OverlayWindow(
         root = null
         service.unregisterReceiver(screenOffReceiver)
         if (backdrop is OverlayBackdrop.Blur) windowManager.removeCrossWindowBlurEnabledListener(blurListener)
+        (service as? WindowChanges)?.removeWindowsChangedListener(keyboardTracker)
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         // The system may already have removed the window (for example on screen off).
         if (current.isAttachedToWindow) windowManager.removeViewImmediate(current)
     }
 
     /**
-     * Shrinks the window to its content's height at the top of the screen, or restores it to full
-     * screen. The system draws the keyboard below accessibility overlays (layer 13 vs 31 in
+     * Shrinks the window to its content's height, docked on top of the keyboard, or restores it to
+     * full screen. The system draws the keyboard below accessibility overlays (layer 13 vs 31 in
      * `WindowManagerPolicy`) and only lifts it above activity windows, so the window must leave
      * room for it while its content takes text input. The backdrop is dropped meanwhile, since it
      * would dim or blur the keyboard too.
+     *
+     * The keyboard's top comes from its accessibility window, whose bounds are its touchable area
+     * (`AccessibilityWindowsPopulator`). It's re-read whenever the system reports a window change
+     * (the keyboard opening, closing or resizing), through the service's [WindowChanges]; until a
+     * keyboard shows, the window sits at the top of the screen.
      */
     fun setCompact(compact: Boolean) {
         val current = root ?: return
@@ -122,7 +130,43 @@ class OverlayWindow(
         val params = current.layoutParams as WindowManager.LayoutParams
         params.height = if (compact) WindowManager.LayoutParams.WRAP_CONTENT else WindowManager.LayoutParams.MATCH_PARENT
         params.applyBackdrop()
+        keyboardTop = null
+        params.dockAbove(null)
         if (current.isAttachedToWindow) windowManager.updateViewLayout(current, params)
+        val changes = service as? WindowChanges
+        if (compact) {
+            changes?.addWindowsChangedListener(keyboardTracker)
+            keyboardTracker.run() // The keyboard may already be up.
+        } else {
+            changes?.removeWindowsChangedListener(keyboardTracker)
+        }
+    }
+
+    private var keyboardTop: Int? = null
+
+    /** Docks on the keyboard's current top; runs on each window change while compact. */
+    private val keyboardTracker = Runnable {
+        val current = root ?: return@Runnable
+        if (!compact || !current.isAttachedToWindow) return@Runnable
+        val top = service.windows
+            .firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            ?.let { Rect().also(it::getBoundsInScreen).top }
+        if (top == keyboardTop) return@Runnable
+        keyboardTop = top
+        val params = current.layoutParams as WindowManager.LayoutParams
+        params.dockAbove(top)
+        windowManager.updateViewLayout(current, params)
+    }
+
+    /** Bottom edge on [keyboardTop] (screen y), or at the top of the screen without a keyboard. */
+    private fun WindowManager.LayoutParams.dockAbove(keyboardTop: Int?) {
+        if (keyboardTop == null) {
+            gravity = Gravity.TOP or Gravity.START
+            y = 0
+        } else {
+            gravity = Gravity.BOTTOM or Gravity.START
+            y = windowManager.currentWindowMetrics.bounds.height() - keyboardTop
+        }
     }
 
     private fun layoutParams() = WindowManager.LayoutParams(

@@ -378,7 +378,11 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - The model loads in parallel with the first utterance and is freed when the panel closes (after any running transcription).
 - The first active command whose `draftFor(transcript, now)` returns a draft wins. Listening pauses while the modal is open.
 - **Modal:** a card **centred** over a scrim, within thumb reach (user, 2026-10-12); the scrim swallows taps so a command isn't lost. It's padded for the system bars only: the keyboard inset would grow the compact window over the keyboard.
-  - While a text field has focus, the card moves to the top and the window goes compact (`OverlayWindow.setCompact`, which now also drops the dim/blur, since that would cover the keyboard) and only the card is drawn. The card stays at the same place in the composition, so focus survives.
+  - While a text field has focus, the window goes compact (`OverlayWindow.setCompact`) and only the card is drawn. The card stays at the same place in the composition, so focus survives. Compact mode:
+    - drops the dim/blur, which would cover the keyboard
+    - **docks the window's bottom edge on the keyboard's top** (user, 2026-10-12: the gap between a top-docked modal and the keyboard was too big). The keyboard's top is its accessibility window's bounds; those are its touchable region (`AccessibilityWindowsPopulator`).
+    - **is event-driven, not polled** (user: polling is bad design). `OverlayWindow` registers with the service's `WindowChanges`. `PowerAccessibilityService` subscribes to `TYPE_WINDOWS_CHANGED` (`setServiceInfo`) only while a listener is registered, and the keyboard is re-read on each event. `AccessibilityWindowManager.sendEventsForChangedWindowsLocked` sends ADDED, REMOVED and BOUNDS (a changed region) for the keyboard window.
+    - sits at the top of the screen until a keyboard appears
   - Back order: leave typing → the draft's own back (e.g. close a picker) → close the modal → close the panel.
   - Confirm runs `CommandDraft.confirm()`. On failure the error shows and the modal stays.
   - **No Compose dialogs or popups in overlays:** they need an activity window token. Date and time pickers are pages inside the card.
@@ -409,6 +413,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - No time spoken: the modal starts at the next full hour.
 - **Modal:**
   - Text, date and time (pages with M3 `DatePicker`/`TimePicker`).
+  - **Quick-time buttons** in two rows under the date and time: `+10m +30m +1hr +2hr +3hr +6hr +12hr`, then `+1d +2d +3d`. A tap sets the date and time to now (to the minute) plus the amount. Nothing stays selected, and the clock can be changed freely afterwards.
   - **Unlimited early reminders:** each is an amount plus minutes/hours/days ("Reminder coming up in 2 hours").
   - **Priority** (user, 2026-10-12): a row of buttons for ntfy's five priorities, Min · Low · Default · High · Max, with **Max selected by default**. It applies to the reminder and its early reminders.
     - ntfy's levels are 1–5 (`util.ParsePriority`: min, low, default, high, max/urgent).
@@ -511,7 +516,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 | `:core:ui` | `PowerTheme`; the overlay building blocks `OverlayBar` (the rounded bottom pill; swallows taps), `OverlayBottomBars` (stacks bars at the bottom centre), `OverlayBarText`, `OverlayCloseButton`, `MessageBar`, `MessageScreen` (a window showing only a message; tap anywhere closes) and `MESSAGE_CLOSE_DELAY_MS` (1.5 s, how long a confirmation shows before its window closes); `pickedColor()`/`editedColor()` (§3.3's green and red); `onBackdrop()`/`BackdropOutline` (legibility over the blurred backdrop, used by the panel and the voice bar). Messages replace toasts everywhere. |
 | `:core:module` | The module SPI: `PanelModule` (sealed; `usesActivationScreenshot` defaults to false), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService`, a scope tied to the connection, and `activationScreenshot`), `ActivationScreenshot` (single-owner holder: `take()` hands the bitmap over and the caller must recycle it; `replace()` recycles the old one), `ModuleRegistry` |
 | `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. `jsonDataStore(file, serializer, default)` is that pattern for any `@Serializable` value (also used by `:core:assistant` and `:core:ntfy`). |
-| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing); an optional `onBackRequest` takes Back instead. `setCompact` shrinks it to its content at the top (for keyboard input) and drops the dim/blur meanwhile. Single use: create a new one each time. `showMessageWindow(service, message)` opens a window that only shows a message. |
+| `:core:overlay` | `WindowChanges` (window-change events from the accessibility service, subscribed only while listened to). `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing); an optional `onBackRequest` takes Back instead. `setCompact` shrinks it to its content docked on the keyboard's top (for keyboard input) and drops the dim/blur meanwhile. Single use: create a new one each time. `showMessageWindow(service, message)` opens a window that only shows a message. |
 | `:core:capture` | `ScreenImage` (`toSoftware`, `looksBlocked`; unit-tested), `ScreenRecapture` (Retake) and `forEachScreenNode` (walks every app window's accessibility nodes, skipping overlays, the IME and our own package; used by Screen text and `ScreenMediaFinder`). |
 | `:core:media` | Finding and saving on-screen media (§3.7): `MediaFinder` (`accessibility`, `scan`, `all`, `MIN_SIDE_DP`), `ScreenMediaFinder`, `MediaScan` (unit-tested), the region helpers in `MediaRegions.kt` (unit-tested), and `ImageOutput` (copy/share/save PNGs) with the FileProvider. Used by Smart screenshot and Media extractor. |
 | `:core:selection` | `SelectionGeometry` (unit-tested), `SelectionShape`, `SelectionCanvas` (frozen image, scrim, frame, handles, move/resize gestures; state hoisted), `ShapeToggle`, `rememberSelectionGeometry`, and the shape and Max/Default labels. Used by Smart screenshot and OCR text. |
@@ -644,7 +649,8 @@ All decisions are from 2026-10-08.
 - **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
 - **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
-- **The panel's command modal is centred** (user, 2026-10-12), not at the top; only while typing does it sit at the top, above the keyboard.
+- **The panel's command modal is centred** (user, 2026-10-12), not at the top. While typing, it sits directly on top of the keyboard, found through window-change events, never polling (user).
+- **Quick-time buttons** (user, 2026-10-12) in the reminder modal: `+10m +30m +1hr +2hr +3hr +6hr +12hr` and `+1d +2d +3d`. Each sets the date and time once to now plus that amount; they aren't toggles.
 - **New reminder module** (user, 2026-10-12): a normal panel module that opens the same New reminder modal (same rules) **over the panel**, without opening the app.
 - **Reminder priority** (user, 2026-10-12): pick it from a row of buttons in the modal, Max by default for every notification.
 - **Upcoming reminders come only from ntfy** (user, 2026-10-12): Power++ stores nothing and queries the server each time the list opens. Editing and deleting go through sequence IDs; new and edited reminders use the same modal as spoken ones; a new one starts at the current date and time.
@@ -739,6 +745,11 @@ Re-verify only if the target platform changes.
 - `WindowState.canBeImeTarget` doesn't exclude accessibility overlays, so a focusable overlay can take text input.
 - `DisplayContent.shouldImeAttachedToApp` lifts the keyboard above its target only when the target has an `ActivityRecord`, so it is never lifted above an overlay.
 - Hence `OverlayWindow.setCompact` while editing. Confirmed working on-device.
+- **Where the keyboard is** (2026-10-12):
+  - The keyboard's `AccessibilityWindowInfo` (`TYPE_INPUT_METHOD`, listed with `flagRetrieveInteractiveWindows`) has bounds from its input window's touchable region intersected with its frame (`AccessibilityWindowsPopulator.getTouchableRegionInWindow`): the keys, not the whole IME window.
+  - `AccessibilityWindowManager.sendEventsForChangedWindowsLocked` sends `TYPE_WINDOWS_CHANGED` with `WINDOWS_CHANGE_ADDED`/`REMOVED`, or the changes from `AccessibilityWindowInfo.differenceFrom` (`WINDOWS_CHANGE_BOUNDS` when the region changes).
+  - A service gets these only if `TYPE_WINDOWS_CHANGED` is in its event types, which `setServiceInfo` can change at runtime.
+  - Docking on the keyboard is **not yet confirmed on-device** (the user's keyboard is FUTO Keyboard).
 
 **Media class names in the accessibility tree** (2026-10-09; AOSP `main`, androidx-main, Chromium `main`, Firefox `main`):
 - `ImageView.getAccessibilityClassName` → `android.widget.ImageView`; `VideoView` → `android.widget.VideoView`. `SurfaceView` and `TextureView` don't override it, so they report `View.getAccessibilityClassName` = `android.view.View`.

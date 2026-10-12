@@ -7,6 +7,16 @@
     <string name="reminder_title">Reminder</string>
     <string name="reminder_edit_title">Edit reminder</string>
     <string name="reminder_text_label">Remind me to</string>
+    <string name="reminder_quick_10m">+10m</string>
+    <string name="reminder_quick_30m">+30m</string>
+    <string name="reminder_quick_1h">+1hr</string>
+    <string name="reminder_quick_2h">+2hr</string>
+    <string name="reminder_quick_3h">+3hr</string>
+    <string name="reminder_quick_6h">+6hr</string>
+    <string name="reminder_quick_12h">+12hr</string>
+    <string name="reminder_quick_1d">+1d</string>
+    <string name="reminder_quick_2d">+2d</string>
+    <string name="reminder_quick_3d">+3d</string>
     <string name="reminder_priority">Priority</string>
     <string name="reminder_priority_min">Min</string>
     <string name="reminder_priority_low">Low</string>

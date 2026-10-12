@@ -3,6 +3,7 @@ package com.bo0sted.powerplusplus.command.reminders
 import android.content.Context
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -57,6 +58,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.time.temporal.ChronoUnit
 
 /**
  * A reminder being reviewed in the command modal: what, when, and any number of early reminders
@@ -164,6 +166,7 @@ internal class ReminderDraft(
                     Text(time.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)))
                 }
             }
+            QUICK_TIMES.forEach { row -> QuickTimeRow(row) }
 
             Text(stringResource(R.string.reminder_priority), style = MaterialTheme.typography.titleSmall)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -188,6 +191,24 @@ internal class ReminderDraft(
             FilledTonalButton(onClick = { early += EarlyReminder("1", EarlyUnit.Hours) }) {
                 Icon(Icons.Rounded.Add, contentDescription = null)
                 Text(stringResource(R.string.reminder_early_add))
+            }
+        }
+    }
+
+    /** One-off shortcuts: each sets the date and time to now plus its amount; nothing stays selected. */
+    @Composable
+    private fun QuickTimeRow(row: List<Pair<Duration, Int>>) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            row.forEach { (amount, label) ->
+                FilledTonalButton(
+                    onClick = {
+                        val at = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES).plus(amount)
+                        date = at.toLocalDate()
+                        time = at.toLocalTime()
+                    },
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(label), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
             }
         }
     }
@@ -270,6 +291,24 @@ internal class ReminderDraft(
     private companion object {
         /** ntfy refuses scheduled messages less than 10 s ahead (its `message-delay-min`). */
         const val MIN_DELAY_SECONDS = 10L
+
+        /** The quick-time buttons, in two rows (user, 2026-10-12). */
+        val QUICK_TIMES = listOf(
+            listOf(
+                Duration.ofMinutes(10) to R.string.reminder_quick_10m,
+                Duration.ofMinutes(30) to R.string.reminder_quick_30m,
+                Duration.ofHours(1) to R.string.reminder_quick_1h,
+                Duration.ofHours(2) to R.string.reminder_quick_2h,
+                Duration.ofHours(3) to R.string.reminder_quick_3h,
+                Duration.ofHours(6) to R.string.reminder_quick_6h,
+                Duration.ofHours(12) to R.string.reminder_quick_12h,
+            ),
+            listOf(
+                Duration.ofDays(1) to R.string.reminder_quick_1d,
+                Duration.ofDays(2) to R.string.reminder_quick_2d,
+                Duration.ofDays(3) to R.string.reminder_quick_3d,
+            ),
+        )
 
         /** For [NtfyPriority.MIN] to [NtfyPriority.MAX], in order. */
         val PRIORITY_LABELS = listOf(
