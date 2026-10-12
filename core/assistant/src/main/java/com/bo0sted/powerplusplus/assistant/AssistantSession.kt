@@ -16,12 +16,15 @@ import com.bo0sted.powerplusplus.whisper.SpeechModel
 import com.bo0sted.powerplusplus.whisper.WhisperModels
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,6 +88,8 @@ class AssistantSession internal constructor(
     data class Notice(@StringRes val message: Int, val heard: String?)
 
     private var model: Deferred<SpeechModel>? = null
+    private var stopListening: CompletableDeferred<Unit>? = null
+    private var current: Job? = null
     private var noticeJob: Job? = null
     private val job: Job = scope.launch { run() } // Last: run() starts right away.
 
@@ -101,10 +106,23 @@ class AssistantSession internal constructor(
         model = loading
         try {
             while (true) {
-                status = Status.Listening
-                val audio = VoiceCapture.nextUtterance { level = it }
-                status = Status.Transcribing
-                val text = withContext(Dispatchers.Default) { loading.await().transcribe(audio) }
+                val stop = CompletableDeferred<Unit>()
+                stopListening = stop
+                // Its own job, so a tap can drop it (see onWaveTap) without ending the session.
+                val utterance = scope.async {
+                    status = Status.Listening
+                    val audio = VoiceCapture.nextUtterance(stop) { level = it }
+                    status = Status.Transcribing
+                    // A dropped transcription still finishes in whisper.cpp; its result is ignored.
+                    withContext(Dispatchers.Default) { loading.await().transcribe(audio) }
+                }
+                current = utterance
+                val text = try {
+                    utterance.await()
+                } catch (e: CancellationException) {
+                    currentCoroutineContext().ensureActive() // The session closed: stop.
+                    continue // Dropped by a tap: start fresh.
+                }
                 Log.i(TAG, "Heard: $text")
                 if (text.isBlank()) continue
                 val now = ZonedDateTime.now()
@@ -123,6 +141,20 @@ class AssistantSession internal constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Assistant stopped", e)
             status = Status.Failed(e.message ?: e.javaClass.simpleName)
+        } finally {
+            current?.cancel()
+        }
+    }
+
+    /**
+     * The voice wave was tapped. While listening: stop the microphone now and transcribe what was
+     * said. While transcribing: drop it and everything said, and listen afresh.
+     */
+    fun onWaveTap() {
+        when (status) {
+            Status.Listening -> stopListening?.complete(Unit)
+            Status.Transcribing -> current?.cancel()
+            else -> Unit
         }
     }
 

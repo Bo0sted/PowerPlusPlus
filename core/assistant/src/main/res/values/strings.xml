@@ -2,6 +2,8 @@
 <resources>
     <string name="assistant_listening">Listening</string>
     <string name="assistant_transcribing">Transcribing…</string>
+    <string name="assistant_finish">tap to finish</string>
+    <string name="assistant_start_over">tap to start over</string>
     <string name="assistant_not_recognized">Command not recognized</string>
     <string name="assistant_heard">“%1$s”</string>
     <string name="assistant_needs_microphone">Allow the microphone to use voice commands</string>

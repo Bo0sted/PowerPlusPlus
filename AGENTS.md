@@ -334,7 +334,8 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 
 **What the user asked for:**
 - Opening the panel starts listening. The modules stay usable.
-- A voice wave across the bottom, with a "Whisper logo". There's no official one, so the user chose our own glyph: three breath strokes in a glowing orb.
+- A voice wave across the bottom. It first had our own glyph (there's no official Whisper logo); the user then had it removed (2026-10-12): **waves only**.
+- **The wave is tappable** (user, 2026-10-12). Listening starts when the panel opens. A tap while listening stops the microphone and transcribes what was said so far. A tap while transcribing drops it and everything said, and listening starts afresh. The label says which ("Listening · tap to finish", "Transcribing… · tap to start over"). Silence still ends an utterance on its own.
 - A valid command opens a **shared modal** to configure it. Back, Cancel and Confirm close only the modal; the panel stays open for more.
 - No valid command shows **"Command not recognized"** in the window (no toast, §0), plus what was heard, and listening continues.
 - A "Whisper assistant" settings section: download models, configure ntfy (its own switchable part), and a list of commands with a switch each.
@@ -366,6 +367,8 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - `AudioRecord` with `VOICE_RECOGNITION`, 16 kHz mono float, opened per utterance.
   - `Endpointer` (pure, unit-tested) works on 20 ms frames with an adaptive noise floor (×2.5, at least 0.004 RMS).
   - Speech starts after 3 loud frames and ends after 0.8 s of quiet. At least 0.24 s, at most 20 s, plus a 0.3 s pre-roll.
+  - **Tap to finish:** `VoiceCapture.nextUtterance(stop)` returns at once when `stop` completes. It returns the speech so far, or everything recorded (up to 20 s) if the endpointer hadn't heard speech start, for a quiet voice.
+  - **Tap to start over:** each listen-and-transcribe cycle runs in its own job (`AssistantSession.onWaveTap` cancels it), and the loop starts the next one. A transcription already inside whisper.cpp can't be interrupted, so it finishes in the background and its result is ignored. `SpeechModel` is synchronized, so the next transcription waits for it. Interrupting it would need whisper's `abort_callback` wired through JNI.
 - The model loads in parallel with the first utterance and is freed when the panel closes (after any running transcription).
 - The first active command whose `draftFor(transcript, now)` returns a draft wins. Listening pauses while the modal is open.
 - **Modal:** a card at the top over a scrim; the scrim swallows taps so a command isn't lost.
@@ -504,7 +507,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 | `:core:ocr` | The engine/model manager (§4) and the pipeline (§3.3): `PpOcr`, `DbPostProcess`, `CtcDecoder` (pure parts unit-tested), `TextRecognizer`. |
 | `:core:whisper` | Speech recognition (§3.8): whisper.cpp from `third_party/whisper.cpp` built by CMake with a small JNI bridge (`src/main/cpp`), `SpeechModel` (load/transcribe/close; `audioContext` unit-tested), `WhisperCatalog` and `WhisperModels` (a `ComponentStore`). |
 | `:core:ntfy` | `NtfyClient` (JSON publish, delay-limit probe; `findDelayLimit` unit-tested), `NtfyRepository`/`NtfySettings` (saved only after a successful post). |
-| `:core:assistant` | The assistant (§3.8): the `AssistantCommand`/`CommandDraft` SPI, `AssistantCommands` (registry and switches), `Assistant`/`AssistantSession`, `VoiceCapture` + `Endpointer` (unit-tested), and `AssistantOverlay` (voice wave, whisper glyph, command modal). Depends on nothing command-specific. |
+| `:core:assistant` | The assistant (§3.8): the `AssistantCommand`/`CommandDraft` SPI, `AssistantCommands` (registry and switches), `Assistant`/`AssistantSession`, `VoiceCapture` + `Endpointer` (unit-tested), and `AssistantOverlay` (the tappable voice wave and the command modal). Depends on nothing command-specific. |
 | `:core:textpick` | Shared text-selection overlay, used by Screen text and OCR text. `TextBlock(text, IntRect screen px)`; `normalizeTextBlocks` drops container summaries (blocks enclosing a smaller block), blanks and duplicates, and sorts in reading order. `hitTest` picks the smallest block under the tap, with 10dp slop. `TextPickState` + `PickList` (the selection list with edits; unit-tested), `ZoomViewport` (pinch-zoom maths; unit-tested), `TextPickScreen` (list panel, edit card, optional background with pinch-zoom, `closeOnTapOutside`), `showTextPick(service, blocks)`, `copyToClipboard`. |
 | `:command:*` | One per assistant command. They apply `powerpp.assistant.command` and bind themselves with `@Binds @IntoSet AssistantCommand`. Currently: `:command:reminders`. |
 | `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`, `:module:mediaextractor`. |
@@ -584,7 +587,7 @@ The settings list, the switch and the modal pick it up automatically.
 - **Whisper assistant (2026-10-12):**
   - whisper.cpp + NDK (not ONNX Runtime).
   - base.en only.
-  - Our own glyph, not a third-party logo.
+  - No logo on the wave (the user removed our glyph); the wave is tappable.
   - ntfy delivers the notifications (no notifications, alarms or exact-alarm permission in Power++).
   - The ntfy delay limit is measured and enforced, with a re-check button.
   - Built in, not a module.
@@ -624,7 +627,7 @@ All decisions are from 2026-10-08.
   - It's built into the panel, not a module. It listens whenever the panel is open (if set up).
   - Engine: whisper.cpp with the NDK, as FUTO Keyboard does. Not ONNX Runtime: FUTO's fast short-audio models are GGML, and ONNX versions of Whisper always process 30 s.
   - Model: base.en.
-  - Our own glyph.
+  - Waves only, no logo; tapping them finishes or restarts (user).
   - Commands are separate plugins that declare their requirements; the assistant and future commands don't need ntfy.
 - **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).

@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,10 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -129,12 +125,17 @@ private fun VoiceBar(session: AssistantSession, onOpenSettings: () -> Unit) {
             is Status.Failed -> MessageBar(stringResource(R.string.assistant_failed, status.reason), Modifier.padding(horizontal = 16.dp))
             Status.Listening, Status.Transcribing -> {
                 val transcribing = status == Status.Transcribing
-                Box(Modifier.fillMaxWidth().height(WAVE_HEIGHT), contentAlignment = Alignment.Center) {
-                    VoiceWave(level = if (transcribing) 0f else session.level, busy = transcribing, modifier = Modifier.fillMaxSize())
-                    WhisperOrb(level = session.level, busy = transcribing)
-                }
+                val action = stringResource(if (transcribing) R.string.assistant_start_over else R.string.assistant_finish)
+                VoiceWave(
+                    level = if (transcribing) 0f else session.level,
+                    busy = transcribing,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WAVE_HEIGHT)
+                        .clickable(onClickLabel = action, onClick = session::onWaveTap),
+                )
                 Text(
-                    stringResource(if (transcribing) R.string.assistant_transcribing else R.string.assistant_listening),
+                    stringResource(if (transcribing) R.string.assistant_transcribing else R.string.assistant_listening) + " · " + action,
                     style = MaterialTheme.typography.labelLarge.onBackdrop(),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -190,46 +191,6 @@ private fun DrawScope.wavePath(cycles: Float, phase: Float, amplitude: Float): P
     return path
 }
 
-/** Power++'s whisper mark: three breath strokes in a glowing orb that pulses with the voice. */
-@Composable
-private fun WhisperOrb(level: Float, busy: Boolean) {
-    val smoothed by animateFloatAsState(level, tween(durationMillis = 120), label = "orb")
-    val pulse by rememberInfiniteTransition(label = "orb").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 1_200, easing = LinearEasing)),
-        label = "pulse",
-    )
-    val colors = MaterialTheme.colorScheme
-    val scale = 1f + 0.18f * smoothed + if (busy) 0.05f * sin(2 * PI * pulse).toFloat() else 0f
-    Box(
-        Modifier
-            .size(ORB_SIZE)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(CircleShape)
-            .background(Brush.radialGradient(listOf(colors.primary, colors.tertiary)))
-            .pointerInput(Unit) { detectTapGestures { } }, // Not a dismissal tap.
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(ORB_SIZE * 0.6f)) {
-            val unit = size.minDimension / 24f
-            val stroke = Stroke(width = 2f * unit, cap = StrokeCap.Round)
-            // Three short waves, each a little shorter and further right: a breath fading out.
-            listOf(Triple(7f, 4f, 20f), Triple(12f, 6f, 19f), Triple(17f, 8f, 17f)).forEach { (y, start, end) ->
-                val path = Path()
-                var x = start
-                while (x <= end) {
-                    val py = y + 1.4f * sin(2 * PI * (x - start) / (end - start)).toFloat()
-                    if (x == start) path.moveTo(x * unit, py * unit) else path.lineTo(x * unit, py * unit)
-                    x += 0.5f
-                }
-                drawPath(path, colors.onPrimary, style = stroke)
-            }
-            drawCircle(colors.onPrimary, radius = 1.3f * unit, center = Offset(3f * unit, 7f * unit))
-        }
-    }
-}
-
 /** The [CommandModal] at the top of the panel; it tells the session when a text field has focus. */
 @Composable
 private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, compact: Boolean) {
@@ -254,4 +215,3 @@ private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, co
 }
 
 private val WAVE_HEIGHT = 112.dp
-private val ORB_SIZE = 64.dp
