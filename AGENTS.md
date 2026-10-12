@@ -29,7 +29,7 @@ All built, tested and installed. The user hasn't yet tried the module or the wav
   - Smart screenshot, both the selection and the editor (§3.4); not re-checked since its selection moved to `:core:selection` (§10)
   - the activation screenshot and Retake (§3.5, §3.5b)
   - the OCR engine/model manager, with ORT telemetry disabled (§4)
-- **Next action:** have the user try the **New reminder** module (add it in the layout editor; its modal should open over the panel) and the wave taps (finish, start over). Also try **Upcoming reminders** (Settings → Whisper assistant): list, edit (including times and early reminders), delete, and New reminder. The user is raising their own ntfy server's `message-delay-limit` (§11); afterwards **Re-check limit** should show the new value. Transcripts are logged at info level under `PowerPP.Assistant` / `PowerPP.Whisper`.
+- **Next action:** the user has tried the New reminder module and the modal on the keyboard. They still find the switch to typing not ideal but accepted it as is (§8, "Typing in the panel's modal"); don't reopen it unless they ask. Still to try: the wave taps (finish, start over) and the quick-time buttons. Also try **Upcoming reminders** (Settings → Whisper assistant): list, edit (including times and early reminders), delete, and New reminder. The user is raising their own ntfy server's `message-delay-limit` (§11); afterwards **Re-check limit** should show the new value. Transcripts are logged at info level under `PowerPP.Assistant` / `PowerPP.Whisper`.
 
   Still pending from session 3: Media extractor and Smart screenshot's Scan on real apps (the user mostly browses in **Firefox**; tune `MediaScan` from that, §3.7), and re-checking Smart screenshot and Screen text (§10). The open question for the user is in §7 (Small model).
 - **Home machine before building:**
@@ -656,6 +656,13 @@ All decisions are from 2026-10-08.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
 - **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
 - **The panel's command modal is centred** (user, 2026-10-12), not at the top. While typing, it sits directly on top of the keyboard, switched in one step once the keyboard is up (no intermediate jumps) and found through window-change events, never polling (user).
+- **Typing in the panel's modal: kept as is** (user, 2026-10-12, after weighing the options). The root cause is that the system keyboard is always drawn below accessibility overlays (§11), so any overlay must get out of its way once a field has focus, and the blur can't stay. A custom-drawn modal wouldn't change that. Options discussed and **not** taken:
+  - a transparent popup activity for the modal: it sits below the keyboard so the system animates it, but the panel closes when it opens
+  - Power++'s own on-screen keyboard: no resizing, but it loses FUTO's typing features
+  - `SYSTEM_ALERT_WINDOW` (`TYPE_APPLICATION_OVERLAY` is below the keyboard): ruled out in §2.2
+  - an OCR-style edit card at the top for the text: it has no layout change after the keyboard arrives, but brings back the gap to the keyboard
+
+  OCR's edit card does nothing special; it looks calm only because it's a separate card already at the top, and its window has no backdrop to remove.
 - **Quick-time buttons** (user, 2026-10-12) in the reminder modal: `+10m +30m +1hr +2hr +3hr +6hr +12hr` and `+1d +2d +3d`. Each sets the date and time once to now plus that amount; they aren't toggles.
 - **New reminder module** (user, 2026-10-12): a normal panel module that opens the same New reminder modal (same rules) **over the panel**, without opening the app.
 - **Reminder priority** (user, 2026-10-12): pick it from a row of buttons in the modal, Max by default for every notification.
