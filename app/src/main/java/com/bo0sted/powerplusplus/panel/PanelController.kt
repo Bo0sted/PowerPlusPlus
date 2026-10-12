@@ -2,11 +2,15 @@ package com.bo0sted.powerplusplus.panel
 
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
+import android.content.Intent
 import android.graphics.Bitmap
 import android.util.Log
 import android.view.Display
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.bo0sted.powerplusplus.assistant.Assistant
+import com.bo0sted.powerplusplus.assistant.AssistantOverlay
+import com.bo0sted.powerplusplus.assistant.AssistantSession
 import com.bo0sted.powerplusplus.data.Backdrop
 import com.bo0sted.powerplusplus.data.PanelConfig
 import com.bo0sted.powerplusplus.data.PanelRepository
@@ -33,6 +37,7 @@ import kotlin.math.roundToInt
 class PanelController @Inject constructor(
     private val hostProvider: ModuleHostProvider,
     private val registry: ModuleRegistry,
+    private val assistant: Assistant,
     repository: PanelRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -42,6 +47,9 @@ class PanelController @Inject constructor(
         repository.config.stateIn(scope, SharingStarted.Eagerly, PanelConfig())
 
     private var window: OverlayWindow? = null
+
+    /** The voice assistant while the panel is open; it's part of the panel, not a module. */
+    private var session: AssistantSession? = null
 
     /** True while the activation screenshot is being taken and the panel isn't added yet. */
     private var capturing = false
@@ -113,24 +121,47 @@ class PanelController @Inject constructor(
             Backdrop.Dim -> OverlayBackdrop.Dim()
         }
 
-        val overlay = OverlayWindow(host.service, backdrop, onDismissRequest = ::dismiss)
+        val assistantSession = assistant.open(host.scope)
+        session = assistantSession
+        val overlay = OverlayWindow(
+            host.service,
+            backdrop,
+            onDismissRequest = ::dismiss,
+            // Back closes the command modal first, if one is open.
+            onBackRequest = { if (!assistantSession.onBack()) dismiss() },
+        )
         window = overlay
         overlay.show {
             val current by config.collectAsStateWithLifecycle()
             PowerTheme(darkTheme = true) {
-                PanelScreen(
-                    config = current,
-                    registry = registry,
-                    host = host,
-                    onAction = { module ->
-                        dismiss(keepScreenshot = module.usesActivationScreenshot)
-                        host.scope.launch { module.run(host) }
-                    },
-                    onToggle = { module: ToggleModule, on -> host.scope.launch { module.setOn(host, on) } },
+                AssistantOverlay(
+                    session = assistantSession,
                     onDismiss = ::dismiss,
-                )
+                    onOpenSettings = { openSettings(host) },
+                    onCompactChange = overlay::setCompact,
+                ) {
+                    PanelScreen(
+                        config = current,
+                        registry = registry,
+                        host = host,
+                        onAction = { module ->
+                            dismiss(keepScreenshot = module.usesActivationScreenshot)
+                            host.scope.launch { module.run(host) }
+                        },
+                        onToggle = { module: ToggleModule, on -> host.scope.launch { module.setOn(host, on) } },
+                        onDismiss = ::dismiss,
+                    )
+                }
             }
         }
+    }
+
+    /** Started while the panel is still visible, which is what allows the activity start. */
+    private fun openSettings(host: ModuleHost) {
+        val service = host.service
+        service.packageManager.getLaunchIntentForPackage(service.packageName)
+            ?.let { service.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        dismiss()
     }
 
     /**
@@ -139,6 +170,8 @@ class PanelController @Inject constructor(
      */
     fun dismiss(keepScreenshot: Boolean = false) {
         capturing = false
+        session?.close()
+        session = null
         window?.dismiss()
         window = null
         if (!keepScreenshot) hostProvider.host.value?.activationScreenshot?.replace(null)

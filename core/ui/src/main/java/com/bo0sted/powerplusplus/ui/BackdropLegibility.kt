@@ -1,4 +1,4 @@
-package com.bo0sted.powerplusplus.panel
+package com.bo0sted.powerplusplus.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Offset
@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
  * alike (the usual approach for labels over wallpapers).
  */
 @Composable
-internal fun TextStyle.onBackdrop(): TextStyle {
+fun TextStyle.onBackdrop(): TextStyle {
     val density = LocalDensity.current
     return copy(
         shadow = Shadow(
@@ -26,4 +26,4 @@ internal fun TextStyle.onBackdrop(): TextStyle {
 }
 
 /** Outline for small non-text marks (page dots) over the backdrop. */
-internal val BackdropOutline = Color.Black.copy(alpha = 0.45f)
+val BackdropOutline = Color.Black.copy(alpha = 0.45f)

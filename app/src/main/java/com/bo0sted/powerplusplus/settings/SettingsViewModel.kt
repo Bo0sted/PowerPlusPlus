@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.bo0sted.powerplusplus.data.PanelConfig
 import com.bo0sted.powerplusplus.data.PanelRepository
 import com.bo0sted.powerplusplus.module.ModuleRegistry
-import com.bo0sted.powerplusplus.ocr.ComponentState
+import com.bo0sted.powerplusplus.download.ComponentState
 import com.bo0sted.powerplusplus.ocr.OcrComponent
 import com.bo0sted.powerplusplus.ocr.OcrComponents
 import com.bo0sted.powerplusplus.panel.PanelController

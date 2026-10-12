@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Voice commands, recorded only while the panel is open and transcribed on the device. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+</manifest>

@@ -46,6 +46,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 item { LayoutSection(current, viewModel.registry, viewModel::edit) }
                 item { AppearanceSection(current, viewModel::edit) }
                 item { OcrSection(ocrStates, viewModel::installOcr, viewModel::removeOcr) }
+                item { AssistantSection() }
             }
         }
     }

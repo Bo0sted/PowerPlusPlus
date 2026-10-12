@@ -1,4 +1,4 @@
-package com.bo0sted.powerplusplus.ocr
+package com.bo0sted.powerplusplus.download
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -16,7 +16,7 @@ import java.security.MessageDigest
  * pinned hosts answer 206); a host that ignores the range restarts the file. Each URL is tried in
  * order. Only a verified file is renamed into place, so a file with the final name is always good.
  */
-internal object VerifiedDownloader {
+object VerifiedDownloader {
 
     /** @param onProgress bytes of this file on disk so far. */
     suspend fun download(file: RemoteFile, directory: File, onProgress: (Long) -> Unit): File = withContext(Dispatchers.IO) {

@@ -35,16 +35,16 @@
     <string name="ocr_engine_name">OCR engine (ONNX Runtime %1$s)</string>
     <string name="ocr_engine_source">From Microsoft, via Maven Central</string>
     <string name="ocr_model_source">From PaddlePaddle, via Hugging Face (ModelScope as mirror)</string>
-    <string name="ocr_status_not_installed">Not downloaded · %1$s</string>
-    <string name="ocr_status_downloading">Downloading %1$d %% · %2$s of %3$s</string>
-    <string name="ocr_status_verifying">Verifying…</string>
-    <string name="ocr_status_installed">Installed · %1$s</string>
-    <string name="ocr_status_failed">Failed: %1$s</string>
-    <string name="ocr_download">Download</string>
-    <string name="ocr_retry">Retry</string>
-    <string name="ocr_remove">Remove</string>
-    <string name="ocr_remove_title">Remove %1$s?</string>
-    <string name="ocr_remove_body">It can be downloaded again at any time.</string>
+    <string name="component_status_not_installed">Not downloaded · %1$s</string>
+    <string name="component_status_downloading">Downloading %1$d %% · %2$s of %3$s</string>
+    <string name="component_status_verifying">Verifying…</string>
+    <string name="component_status_installed">Installed · %1$s</string>
+    <string name="component_status_failed">Failed: %1$s</string>
+    <string name="component_download">Download</string>
+    <string name="component_retry">Retry</string>
+    <string name="component_remove">Remove</string>
+    <string name="component_remove_title">Remove %1$s?</string>
+    <string name="component_remove_body">It can be downloaded again at any time.</string>
 
     <string name="appearance_title">Appearance</string>
     <string name="appearance_columns">Columns</string>
@@ -56,4 +56,34 @@
     <string name="appearance_background_blur">Blur</string>
     <string name="appearance_background_dim">Dimmed black</string>
     <string name="appearance_background_hint">Blur switches to dimmed black automatically when the device can\'t blur, such as in battery saver.</string>
+    <string name="assistant_title">Whisper assistant</string>
+    <string name="assistant_body">While the panel is open, speak a command. Speech is recognised on this phone with Whisper; no audio leaves it. The assistant listens only when a speech model is downloaded and at least one command is on.</string>
+    <string name="assistant_model_name">Whisper %1$s</string>
+    <string name="assistant_model_source">FUTO\'s fine-tune for short audio, from FUTO (keyboard.futo.org)</string>
+    <string name="assistant_microphone">Microphone</string>
+    <string name="assistant_microphone_granted">Allowed. Used only while the panel is open.</string>
+    <string name="assistant_microphone_needed">Needed to hear commands.</string>
+    <string name="assistant_microphone_allow">Allow</string>
+    <string name="assistant_commands">Commands</string>
+    <string name="ntfy_title">ntfy</string>
+    <string name="ntfy_body">Delivers notifications through your ntfy server, which holds scheduled ones until they\'re due. Subscribe to the topic in the ntfy app.</string>
+    <string name="ntfy_server">Server</string>
+    <string name="ntfy_topic">Topic</string>
+    <string name="ntfy_token">Access token (optional)</string>
+    <string name="ntfy_save">Test and save</string>
+    <string name="ntfy_refresh_limit">Re-check limit</string>
+    <string name="ntfy_saved">Posting to %1$s. The server holds messages up to %2$s ahead.</string>
+    <string name="ntfy_failed">Not saved: %1$s</string>
+    <plurals name="ntfy_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="ntfy_hours">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="ntfy_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
 </resources>

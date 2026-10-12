@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistant_listening">Listening</string>
+    <string name="assistant_transcribing">Transcribing…</string>
+    <string name="assistant_not_recognized">Command not recognized</string>
+    <string name="assistant_heard">“%1$s”</string>
+    <string name="assistant_needs_microphone">Allow the microphone to use voice commands</string>
+    <string name="assistant_open_settings">Settings</string>
+    <string name="assistant_failed">Voice commands stopped: %1$s</string>
+    <string name="command_cancel">Cancel</string>
+    <string name="command_confirm">Confirm</string>
+</resources>

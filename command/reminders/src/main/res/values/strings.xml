@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminder_command_title">Reminders</string>
+    <string name="reminder_command_description">“Remind me at 8pm tomorrow to call Mom”: a notification through ntfy at that time, plus any early reminders you add.</string>
+    <string name="reminder_needs_ntfy">Needs ntfy, set up above</string>
+
+    <string name="reminder_title">Reminder</string>
+    <string name="reminder_text_label">Remind me to</string>
+    <string name="reminder_early_heading">Early reminders</string>
+    <string name="reminder_early_add">Add early reminder</string>
+    <string name="reminder_early_remove">Remove early reminder</string>
+    <string name="reminder_early_before">%1$s before</string>
+    <string name="reminder_unit_minutes">min</string>
+    <string name="reminder_unit_hours">hours</string>
+    <string name="reminder_unit_days">days</string>
+    <string name="reminder_page_back">Back</string>
+    <string name="reminder_page_done">Done</string>
+
+    <string name="reminder_problem_text">Add what to remind you about</string>
+    <string name="reminder_problem_past">Pick a time in the future</string>
+    <string name="reminder_problem_limit">Your ntfy server accepts reminders up to %1$s ahead</string>
+    <string name="reminder_problem_early_amount">Enter how long before for each early reminder</string>
+    <string name="reminder_problem_early_past">An early reminder would be in the past</string>
+
+    <string name="reminder_notification_title">Reminder</string>
+    <string name="reminder_early_title">Reminder coming up in %1$s</string>
+
+    <plurals name="reminder_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="reminder_hours">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="reminder_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+</resources>

@@ -13,6 +13,7 @@ android {
 }
 
 dependencies {
+    api(project(":core:download"))
     // Java API + the small JNI glue only: the app's packaging excludes libonnxruntime.so (the engine
     // itself), which is downloaded instead. See OrtEngine.
     api(libs.onnxruntime.android)

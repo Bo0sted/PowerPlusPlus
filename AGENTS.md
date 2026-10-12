@@ -4,6 +4,15 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
+**Session 4 (2026-10-12, the work machine):** checked this file against the code; three statements were out of date and are fixed (§3.2 copy order, §3.5b capture order, §10 shared bars). Then built the **Whisper assistant** (§3.8):
+- on-device speech recognition with whisper.cpp and FUTO's base.en model
+- a voice wave at the bottom of the panel
+- a shared command modal
+- **Reminders** delivered by **ntfy**
+- a "Whisper assistant" settings section
+
+Built, unit-tested, lint clean and installed; **not yet tried by the user on-device**. Not pushed.
+
 **Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Then built the **Media extractor** module and a **Scan** button in Smart screenshot (§3.7). Pushed by the user on 2026-10-10 (§10).
 
 - **State:** every v1 module is built and **confirmed working by the user on-device**:
@@ -14,7 +23,21 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   - Smart screenshot, both the selection and the editor (§3.4); not re-checked since its selection moved to `:core:selection` (§10)
   - the activation screenshot and Retake (§3.5, §3.5b)
   - the OCR engine/model manager, with ORT telemetry disabled (§4)
-- **Next action:** have the user try Media extractor and Smart screenshot's Scan on real apps (they mostly browse in **Firefox**), then tune `MediaScan`'s thresholds from what they report or from read-only `screencap`s of those screens (§3.7). The user should also still re-check Smart screenshot and Screen text, including the in-window messages (§10). The open question for the user is in §7 (Small model).
+- **Next action:** have the user try the Whisper assistant (§3.8):
+  1. Download base.en and allow the microphone.
+  2. Set up ntfy and turn Reminders on.
+  3. Open the panel and say "Remind me in 5 minutes to test Power++".
+
+  Read `PowerPP.Assistant` / `PowerPP.Whisper` in logcat (transcripts are logged at info level). Check first:
+  - that recording works from the accessibility service (§12)
+  - transcription speed
+  - the keyboard in compact mode
+  - the date and time pickers inside the modal
+
+  Still pending from session 3: Media extractor and Smart screenshot's Scan on real apps (the user mostly browses in **Firefox**; tune `MediaScan` from that, §3.7), and re-checking Smart screenshot and Screen text (§10). The open question for the user is in §7 (Small model).
+- **Home machine before building:**
+  - `git submodule update --init` (whisper.cpp, §6)
+  - install the NDK and CMake with `~/.android/bin/android-cli --no-metrics sdk install 'ndk/28.2.13676358' 'cmake/3.31.6'` (§6)
 - **How work is done here:**
   - Verify every API against AOSP or the pinned library source before relying on it. §11 lists what's already verified; don't re-research those.
   - Lint must stay at zero issues.
@@ -23,8 +46,8 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
   - **Don't send input (taps or swipes) to the user's device.** Read state only (logcat, dumpsys, screencap) and ask the user to interact.
   - The phone's notifications are off for Power++, so **toasts don't show** (`NotificationService: Suppressing toast … by user request`). Read results from logcat. Every user-facing message is shown inside Power++'s own windows (`MessageBar`/`MessageScreen` in `:core:ui`, §5); don't add toasts.
 - **Code ownership:** all Power++ code is written from scratch. XGesture is only read to learn behavior and which APIs it uses; nothing is copied from it.
-- **Repository:** `~/github-clones/PowerPlusPlus` on the user's home machine (it was `~/Downloads/Github_Projects/Power++` on the work machine), branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config of each clone (the global identity differs), with no Claude co-author trailer. The remote and how to push are in §10.
-- **Reference app:** a local clone of XGesture next to the repo, at `~/github-clones/XGesture` (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. Where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
+- **Repository:** `~/github-clones/PowerPlusPlus` on the user's home machine and `~/Downloads/Github_Projects/Power++` on the work machine (both in use), branch `main`. Commits are authored as `Bo0sted <mc526+github@proton.me>`, set in the repo-local git config of each clone (the global identity differs), with no Claude co-author trailer. The remote and how to push are in §10.
+- **Reference app:** a local clone of XGesture next to the repo, at `~/github-clones/XGesture` at home and `~/Downloads/Github_Projects/XGesture` at work (`github.com/qpst4/XGesture`, AGPL-3.0, package `com.slideindex.app`). Power++ takes ideas and end-user behavior from it but is written independently. Where Android offers a better or official way, use it. Pointers to the relevant XGesture files are in §9.
 
 ## 1. What the app is
 
@@ -82,7 +105,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - a light scrim with a rounded box around each text item
   - tap toggles; tapping empty space closes
   - a bottom pill toolbar: "Tap text to select it" / "N selected", Select all ↔ Deselect all, Copy (disabled until something is selected), ×
-  - Copy joins the selection in reading order, one per line, and closes
+  - Copy joins the picks in the order they were tapped (edits included, §3.3), one per line, and closes
   - "No text found on screen" when there's nothing: the window opens with only that message (`MessageScreen` over the live screen); tapping anywhere or × closes it
   - XGesture's extra "Segment" button (its word-split panel) is intentionally **not** included; v1 is Copy-only.
 - **Reading:** all windows from `service.windows`, except accessibility overlays, the IME and our own package.
@@ -269,7 +292,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **OCR:** also gets Retake. Placement: the region-selection stage, in the second bottom row next to Confirm (`RegionScreen`).
 - **Implementation (`ScreenRecapture`, in `:core:capture`):** Android 14+ only (`takeScreenshotOfWindow`); the button is hidden on 12–13, which have no per-window capture, and the only alternative would be a timing guess.
   - Each window from `getWindows()` except accessibility overlays is captured and stacked bottom-up onto a black display-sized canvas, after converting hardware bitmaps to software.
-  - The rate limit is per window id, so the parallel per-window captures don't conflict.
+  - The windows are captured one after another; the rate limit is per window id, so they don't conflict.
   - The platform Javadoc recommends `takeScreenshotOfWindow` for windows under an accessibility overlay.
 - **Verified limitation:** `AccessibilityWindowManager.isReportedWindowType` excludes `TYPE_WALLPAPER` (also non-touchable windows, input consumers, etc.). So a retake shows **black where the wallpaper was** (e.g. behind home-screen icons); app content is unaffected. The same code shows `TYPE_ACCESSIBILITY_OVERLAY` doesn't occlude windows below it in that list.
 
@@ -314,6 +337,88 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - The first tap finds `MediaFinder.all` for the current image (cached; Retake clears it). It moves the selection to the smallest region under the selection's centre. Each further tap steps to the next region (larger ones around the centre, then the rest, nearest first), wrapping around. Moving or resizing the selection starts over from there (`RegionCycle`).
 - No media → "No media found" in the window's notice.
 
+### 3.8 Whisper assistant and voice commands (user, 2026-10-12)
+
+**Implemented**, not a module: the assistant is built into the panel. Built, unit-tested, lint clean, installed; **not yet tried by the user on-device.**
+
+**What the user asked for:**
+- Opening the panel starts listening. The modules stay usable.
+- A voice wave across the bottom, with a "Whisper logo". There's no official one, so the user chose our own glyph: three breath strokes in a glowing orb.
+- A valid command opens a **shared modal** to configure it. Back, Cancel and Confirm close only the modal; the panel stays open for more.
+- No valid command shows **"Command not recognized"** in the window (no toast, §0), plus what was heard, and listening continues.
+- A "Whisper assistant" settings section: download models, configure ntfy (its own switchable part), and a list of commands with a switch each.
+- **Dependency-free by design:** commands declare what they need. Reminders needs ntfy; future commands may not. ntfy settings are saved **only after a successful post**; any error refuses the save.
+
+**Speech** (`:core:whisper`, whisper.cpp v1.9.5 as the submodule `third_party/whisper.cpp`, MIT):
+- FUTO Keyboard uses a modified whisper.cpp (GGML), **not ONNX Runtime**. Its code is FUTO Source First licensed, so nothing is taken from it.
+- **Model:** FUTO's ACFT base.en q8_0 (the user's choice; FUTO bundles tiny.en and offers base/small).
+  - From FUTO's own host: `keyboard.futo.org/voice-input-english-74.bin`, which redirects to `dl.keyboard.futo.org`.
+  - 81,781,811 B, SHA-256 `e9b4b7b8…f1c8`. This is the hash FUTO Keyboard itself pins for `base_en_acft_q8_0.bin`.
+  - The host supports Range (206).
+  - The model card is Apache-2.0 on Hugging Face; the `whisper-acft` repo says MIT.
+  - Installed through `:core:download` to `noBackupFilesDir/whisper/`. Installed = it loads.
+- **ACFT:** the encoder context is `clamp(ceil(samples/320) + 32, 160, 1500)`; FUTO uses the same margin and minimum. `SpeechModel.audioContext` is unit-tested.
+- **Parameters:** greedy, `language` from the model ("en"), single segment, no timestamps, `suppress_nst`, no temperature fallback, threads `min(4, cores)` like OCR.
+- **JNI:** `powerpp_whisper.cpp` returns UTF-8 bytes; `NewStringUTF` aborts on 4-byte sequences.
+- **ggml CPU variants:**
+  - On arm64, `GGML_BACKEND_DL` + `GGML_CPU_ALL_VARIANTS` builds 7 Android CPU variants (ARMv8.0 … ARMv9.2+SME). `ggml_backend_load_all_from_path(nativeLibraryDir)` loads the best one.
+  - That needs extracted native libraries: the app uses `jniLibs.useLegacyPackaging = true`.
+  - armeabi-v7a and x86_64 get one generic CPU backend; x86 isn't built and reports "not available".
+  - The native code is always compiled as Release (`-O3`); a debug build at `-O0` would be unusably slow.
+  - **APK cost:** 6.8 MB compressed for all ABIs, 9.1 MB installed on arm64.
+  - whisper.cpp's unused Parakeet library (~150 KB) is packaged because AGP packages every library target and whisper.cpp has no option to skip it. Limiting AGP to our own target would also drop the runtime-loaded backends.
+- whisper.cpp's own Android example builds an fp16 variant whose flags never reach ggml (FetchContent runs once), so it wasn't followed.
+
+**Session** (`:core:assistant`, `AssistantSession`, one per panel opening; `PanelController` opens and closes it):
+- Off (no bar, no microphone) unless a model is installed **and** a command is on. Without the microphone permission, the bar says so with a Settings button.
+- **Listening:**
+  - `AudioRecord` with `VOICE_RECOGNITION`, 16 kHz mono float, opened per utterance.
+  - `Endpointer` (pure, unit-tested) works on 20 ms frames with an adaptive noise floor (×2.5, at least 0.004 RMS).
+  - Speech starts after 3 loud frames and ends after 0.8 s of quiet. At least 0.24 s, at most 20 s, plus a 0.3 s pre-roll.
+- The model loads in parallel with the first utterance and is freed when the panel closes (after any running transcription).
+- The first active command whose `draftFor(transcript, now)` returns a draft wins. Listening pauses while the modal is open.
+- **Modal:** a card at the top over a scrim; the scrim swallows taps so a command isn't lost.
+  - While a text field has focus, the window goes compact (`OverlayWindow.setCompact`, which now also drops the dim/blur, since that would cover the keyboard) and only the card is drawn. The card stays at the same place in the composition, so focus survives.
+  - Back order: leave typing → the draft's own back (e.g. close a picker) → close the modal → close the panel.
+  - Confirm runs `CommandDraft.confirm()`. On failure the error shows and the modal stays.
+  - **No Compose dialogs or popups in overlays:** they need an activity window token. Date and time pickers are pages inside the card.
+
+**Commands** (`AssistantCommand` SPI, `@IntoSet`, like panel modules):
+- Each command has `id`, `title`, `description`, `available: Flow<Boolean>` (its requirements) and `requirement` (what to set up).
+- `AssistantCommands` stores the user's switches in `assistant.json`. A command is on only while switched on **and** available; the switch itself is kept.
+
+**ntfy** (`:core:ntfy`, verified in the ntfy server source on 2026-10-12, §11):
+- `NtfySettings(enabled, server?)` in `noBackupFilesDir/ntfy.json` (it holds a token).
+- The server address is https only; a scheme is added if missing. Topic `[-_A-Za-z0-9]{1,64}`. Optional access token (Bearer); no username/password.
+- **Test and save:**
+  1. A JSON publish of "ntfy is set up for Power++."
+  2. Measure the delay limit.
+  3. Save only if both succeed.
+- **Delay limit:** ntfy has no API for `message-delay-limit` (ntfy.sh: 3 days).
+  - Each probe is a publish with `X-Delay: <n>s` and an invalid `X-Actions`. The server checks the delay first (40006 = too far) and the actions after it (40018 = the delay was fine), so nothing is ever stored or sent.
+  - A binary search over minutes, up to 10 years, takes about 23 probes (`findDelayLimit`, unit-tested).
+  - **Re-check limit** measures it again (the user's request: after changing the server's limit).
+
+**Reminders** (`:command:reminders`, id `reminders`, available while ntfy is ready):
+- **`ReminderParser`** (pure, 12 tests): a trigger ("remind me", "set a reminder", polite prefixes), time phrases found anywhere and removed, and the rest is the task.
+  - Understands relative times, today/tonight/tomorrow/the day after, weekdays (always the next one), month+day, noon/midnight, h[:mm] am/pm, 24-hour times, "at h", and parts of the day.
+  - An ambiguous "at 8" today is the next 8 o'clock. On a named day, 1–6 means pm and 7–11 am. A date without a time means 9:00.
+  - No time spoken: the modal starts at the next full hour.
+- **Modal:**
+  - Text, date and time (pages with M3 `DatePicker`/`TimePicker`).
+  - **Unlimited early reminders:** each is an amount plus minutes/hours/days ("Reminder coming up in 2 hours").
+  - Confirm is disabled, with the reason, if the text is empty, the time is less than 10 s ahead (ntfy's minimum), it's past the server's limit, or an early reminder is invalid or in the past.
+- **Sending:** one scheduled JSON publish per notification (`delay` = Unix seconds).
+  - The main notification is titled "Reminder" (tag `alarm_clock`); early ones "Reminder coming up in …" (`hourglass_flowing_sand`).
+  - Sequence IDs `powerpp-<id>-<n>`, so confirming again after a partial failure replaces instead of duplicating.
+  - Power++ keeps no reminder list, alarms or notifications of its own (the user: ntfy handles notifications).
+
+**Settings** (`AssistantSection`, `AssistantViewModel`):
+- The model rows reuse `ComponentRow`, now shared with the OCR section.
+- Microphone: Allow, or App info once Android stops asking.
+- ntfy: switch, server/topic/token, Test and save, the saved server and its limit, Re-check limit, and "Not saved: <reason>".
+- Commands: one switch each, disabled with the requirement shown while unavailable.
+
 ## 4. OCR engines and models
 
 **Implemented 2026-10-08** as `:core:ocr` plus the settings section "OCR engine and models" (`app/settings/OcrSection.kt`). **Verified on-device** (the user downloaded both components; see §10). The pipeline and module are in §3.3.
@@ -338,11 +443,12 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
     - **ModelScope** (`PaddlePaddle/…`, revisions `8cb026ec…` for detection and `4b0e4965…` for recognition) serves **byte-identical** files (same SHA-256 per its API) and is the mirror.
     - The same hashes appear in XGesture's catalog: an independent cross-check.
   - All three hosts support HTTP Range (206); Hugging Face and ModelScope redirect to their CDNs.
+- **Shared with Whisper (2026-10-12):** `RemoteFile`, `VerifiedDownloader`, `ComponentState` and the install/remove machinery now live in `:core:download` (`ComponentStore`, below). `OcrComponents` is a `ComponentStore` that adds the engine-first rule and the AAR extraction.
 - **`VerifiedDownloader`:**
   - writes to `<name>.part` and resumes with a Range request (restarting if the host replies 200)
   - tries each URL in order
   - accepts a file only when its size and SHA-256 match, deletes mismatched bytes, then renames it into place
-- **`OcrComponents`** (@Singleton):
+- **`OcrComponents`** (@Singleton, on `ComponentStore`):
   - state per component: NotInstalled / Downloading (throttled to 0.1 %) / Verifying / Installed / Failed
   - installing a model installs the engine first if it's missing
   - cancellation propagates (Remove during a download cancels it)
@@ -359,7 +465,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **The version is pinned once:** `libs.versions.toml` `onnxruntime` → `BuildConfig.ORT_VERSION`. `OcrCatalogTest` fails if the catalog's engine version or URL disagrees.
 - **Pipeline parameters:** see §3.3. They come from PaddleX's OCR pipeline, not the models' `inference.yml`. `RecognitionDictionary` parses the dictionary; it's unit-tested against the quoting rules (PyYAML reads 18,708 plain or single-quoted entries).
 - **Other models:** the pipeline reads the class count and dictionary from the model files, so other PP-OCR (DBNet + CTC) models should work. Check their configs against §3.3 before adding them to `OcrCatalog`. Non-PP-OCR engines would need their own pipeline.
-- **Permission:** the `INTERNET` permission, declared in `:core:ocr`'s manifest, is used **only** for these user-initiated downloads. The final APK requests only `INTERNET` (plus AndroidX's internal dynamic-receiver permission); `ACCESS_NETWORK_STATE`, added by the ORT AAR, is removed with `tools:node="remove"` in the app manifest.
+- **Permissions:** `INTERNET` (declared by `:core:download` and `:core:ntfy`) is used **only** for user-initiated downloads and for posting to the user's ntfy server; `RECORD_AUDIO` (`:core:assistant`) only while the panel is open (§3.8). The final APK requests only those two (plus AndroidX's internal dynamic-receiver permission); `ACCESS_NETWORK_STATE`, added by the ORT AAR, is removed with `tools:node="remove"` in the app manifest.
 - **⚠️ ONNX Runtime telemetry: disabled three ways** (found on-device 2026-10-08 from `ORTTelemetry` log lines; verified in ORT v1.30.0 sources).
   - **What the AAR ships:** a `ContentProvider` `ai.onnxruntime.TelemetryInitializer` that auto-starts at every app launch and creates a 1DS Java `HttpClient`, plus connectivity and power receivers. In native code, `PosixTelemetry::enabled_` defaults to **true**.
   - **Correction:** an earlier statement to the user that ORT "makes no network calls" was unverified and wrong.
@@ -378,18 +484,23 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 
 | Module | Role |
 |---|---|
-| `build-logic` | Included build with the convention plugins: `powerpp.android.application`, `powerpp.android.library`, `powerpp.android.compose`, `powerpp.hilt`, `powerpp.serialization`, `powerpp.panel.module`. Modules apply plugins **only** through these; AGP, KSP and the rest are on build-logic's classpath, not resolvable by id directly. |
-| `:core:ui` | `PowerTheme`; the overlay building blocks `OverlayBar` (the rounded bottom pill; swallows taps), `OverlayBottomBars` (stacks bars at the bottom centre), `OverlayBarText`, `OverlayCloseButton`, `MessageBar`, `MessageScreen` (a window showing only a message; tap anywhere closes) and `MESSAGE_CLOSE_DELAY_MS` (1.5 s, how long a confirmation shows before its window closes); `pickedColor()`/`editedColor()` (§3.3's green and red). Messages replace toasts everywhere. |
+| `build-logic` | Included build with the convention plugins: `powerpp.android.application`, `powerpp.android.library`, `powerpp.android.compose`, `powerpp.hilt`, `powerpp.serialization`, `powerpp.panel.module`, `powerpp.assistant.command`. `PowerBuildConfig` also pins the NDK and CMake versions. Modules apply plugins **only** through these; AGP, KSP and the rest are on build-logic's classpath, not resolvable by id directly. |
+| `:core:ui` | `PowerTheme`; the overlay building blocks `OverlayBar` (the rounded bottom pill; swallows taps), `OverlayBottomBars` (stacks bars at the bottom centre), `OverlayBarText`, `OverlayCloseButton`, `MessageBar`, `MessageScreen` (a window showing only a message; tap anywhere closes) and `MESSAGE_CLOSE_DELAY_MS` (1.5 s, how long a confirmation shows before its window closes); `pickedColor()`/`editedColor()` (§3.3's green and red); `onBackdrop()`/`BackdropOutline` (legibility over the blurred backdrop, used by the panel and the voice bar). Messages replace toasts everywhere. |
 | `:core:module` | The module SPI: `PanelModule` (sealed; `usesActivationScreenshot` defaults to false), `ActionModule` (`run(host)`; the panel is dismissed first), `ToggleModule` (`isOn(host): Flow<Boolean>`, `setOn`; the panel stays open), `ModuleHost` (the connected `AccessibilityService`, a scope tied to the connection, and `activationScreenshot`), `ActivationScreenshot` (single-owner holder: `take()` hands the bitmap over and the caller must recycle it; `replace()` recycles the old one), `ModuleRegistry` |
-| `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. |
-| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing); an optional `onBackRequest` takes Back instead. `setCompact` shrinks it to its content at the top (for keyboard input). Single use: create a new one each time. `showMessageWindow(service, message)` opens a window that only shows a message. |
+| `:core:data` | `PanelConfig` (grid columns×rows, swipe axis, backdrop, pages → `ModuleSlot(id, typeId, cell, enabled)`). Pure edit functions are in `PanelEdits.kt` and unit-tested; a rejected edit returns the same instance. `PanelRepository` wraps DataStore (`panel.json`) and replaces the file with defaults if it's corrupt. `jsonDataStore(file, serializer, default)` is that pattern for any `@Serializable` value (also used by `:core:assistant` and `:core:ntfy`). |
+| `:core:overlay` | `OverlayWindow`: a full-screen `TYPE_ACCESSIBILITY_OVERLAY` hosting Compose. It provides its own Lifecycle and SavedState owners and blur with live fallback to dim. It calls `onDismissRequest` on Back **and on `ACTION_SCREEN_OFF`** (a non-exported receiver registered while showing); an optional `onBackRequest` takes Back instead. `setCompact` shrinks it to its content at the top (for keyboard input) and drops the dim/blur meanwhile. Single use: create a new one each time. `showMessageWindow(service, message)` opens a window that only shows a message. |
 | `:core:capture` | `ScreenImage` (`toSoftware`, `looksBlocked`; unit-tested), `ScreenRecapture` (Retake) and `forEachScreenNode` (walks every app window's accessibility nodes, skipping overlays, the IME and our own package; used by Screen text and `ScreenMediaFinder`). |
 | `:core:media` | Finding and saving on-screen media (§3.7): `MediaFinder` (`accessibility`, `scan`, `all`, `MIN_SIDE_DP`), `ScreenMediaFinder`, `MediaScan` (unit-tested), the region helpers in `MediaRegions.kt` (unit-tested), and `ImageOutput` (copy/share/save PNGs) with the FileProvider. Used by Smart screenshot and Media extractor. |
 | `:core:selection` | `SelectionGeometry` (unit-tested), `SelectionShape`, `SelectionCanvas` (frozen image, scrim, frame, handles, move/resize gestures; state hoisted), `ShapeToggle`, `rememberSelectionGeometry`, and the shape and Max/Default labels. Used by Smart screenshot and OCR text. |
+| `:core:download` | Verified downloads (§4): `RemoteFile`, `Downloadable`, `VerifiedDownloader`, `ComponentState`, and `ComponentStore` (state per component, install/remove, resume, marker written last, hooks for prerequisites, skipping and the load check). Used by OCR and Whisper. |
 | `:core:ocr` | The engine/model manager (§4) and the pipeline (§3.3): `PpOcr`, `DbPostProcess`, `CtcDecoder` (pure parts unit-tested), `TextRecognizer`. |
+| `:core:whisper` | Speech recognition (§3.8): whisper.cpp from `third_party/whisper.cpp` built by CMake with a small JNI bridge (`src/main/cpp`), `SpeechModel` (load/transcribe/close; `audioContext` unit-tested), `WhisperCatalog` and `WhisperModels` (a `ComponentStore`). |
+| `:core:ntfy` | `NtfyClient` (JSON publish, delay-limit probe; `findDelayLimit` unit-tested), `NtfyRepository`/`NtfySettings` (saved only after a successful post). |
+| `:core:assistant` | The assistant (§3.8): the `AssistantCommand`/`CommandDraft` SPI, `AssistantCommands` (registry and switches), `Assistant`/`AssistantSession`, `VoiceCapture` + `Endpointer` (unit-tested), and `AssistantOverlay` (voice wave, whisper glyph, command modal). Depends on nothing command-specific. |
 | `:core:textpick` | Shared text-selection overlay, used by Screen text and OCR text. `TextBlock(text, IntRect screen px)`; `normalizeTextBlocks` drops container summaries (blocks enclosing a smaller block), blanks and duplicates, and sorts in reading order. `hitTest` picks the smallest block under the tap, with 10dp slop. `TextPickState` + `PickList` (the selection list with edits; unit-tested), `ZoomViewport` (pinch-zoom maths; unit-tested), `TextPickScreen` (list panel, edit card, optional background with pinch-zoom, `closeOnTapOutside`), `showTextPick(service, blocks)`, `copyToClipboard`. |
+| `:command:*` | One per assistant command. They apply `powerpp.assistant.command` and bind themselves with `@Binds @IntoSet AssistantCommand`. Currently: `:command:reminders`. |
 | `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`, `:module:mediaextractor`. |
-| `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`), and the settings UI (`settings/`: setup checklist, layout editor, appearance). |
+| `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`; the controller wraps the panel in `AssistantOverlay`), and the settings UI (`settings/`: setup checklist, layout editor, appearance, OCR, Whisper assistant; `ComponentRow` is shared by the download sections). |
 
 ### Adding a module type
 1. Create `module/<name>` with `plugins { id("powerpp.panel.module") }`, a `namespace`, and an empty `consumer-rules.pro` (the library convention requires one).
@@ -397,6 +508,13 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 3. Add `include(":module:<name>")` to `settings.gradle.kts` and `implementation(project(":module:<name>"))` to `app/build.gradle.kts`.
 
 Nothing else changes.
+
+### Adding an assistant command
+1. Create `command/<name>` with `plugins { id("powerpp.assistant.command") }`, a `namespace`, and an empty `consumer-rules.pro`.
+2. Implement `AssistantCommand` (a new, never-changing `id`; `available` says what it needs, e.g. `flowOf(true)` for nothing) and a `CommandDraft` for its modal, and bind it `@IntoSet`.
+3. Add `include(":command:<name>")` to `settings.gradle.kts` and `implementation(project(":command:<name>"))` to `app/build.gradle.kts`.
+
+The settings list, the switch and the modal pick it up automatically.
 
 ### Behavior notes
 - The panel reads the config as a hot `StateFlow`, so it opens instantly and reflects edits live.
@@ -409,7 +527,8 @@ Nothing else changes.
 
 **Commands:**
 - `./gradlew :app:assembleDebug` builds the debug APK.
-- Unit tests: `./gradlew :core:data:testDebugUnitTest :core:textpick:testDebugUnitTest :core:capture:testDebugUnitTest :core:selection:testDebugUnitTest :core:ocr:testDebugUnitTest :core:media:testDebugUnitTest :module:screenshot:testDebugUnitTest :module:ocrtext:testDebugUnitTest` (all pass, 2026-10-09).
+- Unit tests: `./gradlew testDebugUnitTest` (88 tests, all pass, 2026-10-12).
+- **First checkout:** `git submodule update --init` fetches whisper.cpp (`third_party/whisper.cpp`, pinned to v1.9.5). The first build compiles it for three ABIs (a few minutes); later builds reuse it.
 - Lint for everything: `./gradlew lintDebug`.
 - Install on the device: `./gradlew :app:installDebug` (needs `adb connect <ip:port>` first).
 - `./gradlew :app:lintDebug` (and `:<module>:lintDebug`) runs lint. Keep lint at zero issues.
@@ -426,7 +545,10 @@ Nothing else changes.
   - `platforms;android-37.0`
   - `build-tools;37.0.0`
   - `build-tools;36.0.0` and `platform-tools` (AGP installs these on the first build if they're missing)
-  - The NDK and CMake were installed and later removed at the user's request (2026-10-08); nothing needs native code.
+  - The NDK and CMake were removed at the user's request on 2026-10-08, then **installed again on 2026-10-12** for whisper.cpp (user-approved), on the work PC only so far.
+    - NDK `28.2.13676358` is AGP 9.4.1's default. CMake `3.31.6`.
+    - Both are pinned in `PowerBuildConfig`.
+    - Installed with `~/.android/bin/android-cli --no-metrics sdk install 'ndk/28.2.13676358' 'cmake/3.31.6'`.
   - The SDK licenses were accepted with the user's approval.
   - **⚠️ Google's Android CLI telemetry:** in cmdline-tools 23.0 (found at home, 2026-10-08), `sdkmanager` is a deprecated wrapper that downloads Google's "Android CLI" to `~/.android/bin/android-cli` and runs it **with usage metrics on** (uploaded to `play.google.com/log`). Verified in its bytecode (`AndroidCLI.initMetrics`): only the per-run `--no-metrics` flag disables them; `~/.android/analytics.settings` `hasOptedIn:false` is ignored. Gradle never uses it. **Never run `sdkmanager`;** run `~/.android/bin/android-cli --no-metrics sdk …` instead.
 - **Gradle:** the wrapper, pinned to **9.8.1** with `distributionSha256Sum`. It was generated from the official distribution, SHA-256 verified.
@@ -451,6 +573,14 @@ Nothing else changes.
 - **OCR region selection:** reuse Smart screenshot's resizable selection; shapes row at the bottom with Retake · Confirm centred under it (2026-10-09).
 - **OCR results:** only Back and × close them (2026-10-09).
 - **Toasts:** none anywhere; every message goes in the overlay (or the editor) (2026-10-09).
+- **Whisper assistant (2026-10-12):**
+  - whisper.cpp + NDK (not ONNX Runtime).
+  - base.en only.
+  - Our own glyph, not a third-party logo.
+  - ntfy delivers the notifications (no notifications, alarms or exact-alarm permission in Power++).
+  - The ntfy delay limit is measured and enforced, with a re-check button.
+  - Built in, not a module.
+  - Details in §3.8.
 - **OCR selection screen:** tapping outside the selection still closes it. What the user cares about is the results screen, which already ignores outside taps (2026-10-09).
 
 ## 8. Decision log
@@ -482,6 +612,16 @@ All decisions are from 2026-10-08.
 - **Pick colours** (user, 2026-10-09): picks green, edited picks red, each with a dark- and light-mode shade that blends with the theme (§3.3), not a fixed bright colour.
 - **Lock screen** (user, 2026-10-08): the panel never shows while the lock screen is up. Instead, a power long-press opens the **system power menu**, with no overlay rendered (see §2.1).
   - Observed before the fix: the assistant session *is* invoked on the lock screen even without `supportsLaunchVoiceAssistFromKeyguard`, and the accessibility overlay draws over the keyguard.
+- **Whisper assistant** (user, 2026-10-12, §3.8):
+  - It's built into the panel, not a module. It listens whenever the panel is open (if set up).
+  - Engine: whisper.cpp with the NDK, as FUTO Keyboard does. Not ONNX Runtime: FUTO's fast short-audio models are GGML, and ONNX versions of Whisper always process 30 s.
+  - Model: base.en.
+  - Our own glyph.
+  - Commands are separate plugins that declare their requirements; the assistant and future commands don't need ntfy.
+- **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
+  - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
+- **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
+- **Reuse over duplication** (user): the OCR downloader became `:core:download`, the panel's JSON DataStore became `jsonDataStore`, the OCR component row became `ComponentRow`, and the backdrop text style moved to `:core:ui`.
 
 ## 9. XGesture reference map
 
@@ -519,7 +659,9 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 - **OCR text** (§3.3), 2026-10-09: resizable selection, progress, results over the frozen capture, the selection list with editing (the keyboard appears in compact mode), the 3-entry list, pinch-zoom and Reset zoom.
 - **Lint:** zero issues across modules. All unit tests pass.
 
-**Session 3 (2026-10-09):** in-window messages replace every toast (Smart screenshot, its editor, Screen text, the "Copied" confirmation on API ≤ 32); the unused first-design OCR strings (`ocr_hint_cursor`, `ocr_hint_drag`, `ocr_reset`) were removed. Built, unit-tested, lint clean and installed on the phone; **not yet checked by the user on-device.** Then Media extractor and Smart screenshot's Scan (§3.7), with the shared `:core:media`, `OverlayBar` family and `forEachScreenNode`; Screen text and OCR text were moved onto those shared pieces (no behaviour change intended). Same status: built, tested, lint clean, installed, not yet checked by the user.
+**Session 3 (2026-10-09):** in-window messages replace every toast (Smart screenshot, its editor, Screen text, the "Copied" confirmation on API ≤ 32); the unused first-design OCR strings (`ocr_hint_cursor`, `ocr_hint_drag`, `ocr_reset`) were removed. Built, unit-tested, lint clean and installed on the phone; **not yet checked by the user on-device.** Then Media extractor and Smart screenshot's Scan (§3.7), with the shared `:core:media`, `OverlayBar` family and `forEachScreenNode`. Screen text now reads nodes through `forEachScreenNode`, and OCR text's selection screen uses the `OverlayBar` family (no behaviour change intended). `TextPickScreen`'s toolbar and Smart screenshot's floating toolbars still draw their own pills. Same status: built, tested, lint clean, installed, not yet checked by the user.
+
+**Session 4 (2026-10-12):** the Whisper assistant, ntfy and Reminders (§3.8), with the shared `:core:download`, `jsonDataStore`, `ComponentRow` and `OverlayWindow.setCompact` dropping the backdrop. Built, 88 unit tests passing, lint at zero issues, installed on the phone. Read-only checks: the native libraries were extracted, all 7 ggml CPU variants are present, and the service process runs with no crashes. **Not yet tried by the user.** Also needs re-checking: the OCR downloads (moved onto `ComponentStore`) and OCR's edit card (`setCompact` changed).
 
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
@@ -591,6 +733,37 @@ Re-verify only if the target platform changes.
 - KSP 2.3.10+ fixed AGP 9 built-in Kotlin.
 - Compose still needs `buildFeatures.compose = true`.
 
+**ntfy server** (source at `github.com/binwiederhier/ntfy`, `main` of 2026-10-12, `server/server.go`, `server/errors.go`, `util/time.go`):
+- **Scheduled delivery:**
+  - `X-Delay` (aliases `Delay`, `X-At`, `At`, `X-In`, `In`; JSON `delay`) takes Unix seconds, durations (`time.ParseDuration`, or n + s/m/h/d), RFC 3339 or natural language.
+  - Minimum `message-delay-min` 10 s; maximum `message-delay-limit`, default 3 days (`DefaultMessageDelayMax`).
+  - No API exposes the limit.
+- **Validation order in `parsePublishParams`:** sequence ID → … → tags → **delay** (40005 too small, 40006 too large) → **actions** (40018 invalid). The rejected request is never stored.
+- **JSON publishing:** `POST /` with `topic`, `message`, `title`, `tags`, `delay`, `sequence_id`, …. It's converted into the same headers internally, so UTF-8 titles are safe.
+- **Sequence IDs:**
+  - Match the topic rule `^[-_A-Za-z0-9]{1,64}$`.
+  - Publishing with an existing sequence ID deletes the scheduled message with that ID first (`DeleteScheduledBySequenceID`).
+  - `DELETE /<topic>/<sequence_id>` cancels one.
+- Errors are JSON `{"code", "http", "error", "link"}`. Access tokens are sent as `Authorization: Bearer tk_…`.
+
+**whisper.cpp v1.9.5 and ggml** (`third_party/whisper.cpp`):
+- `whisper_full_params.audio_ctx` ("overwrite the audio context size"), `suppress_nst`, `single_segment`, `no_timestamps`.
+- whisper.cpp doesn't load backends itself; with `GGML_BACKEND_DL`, call `ggml_backend_load_all_from_path` first.
+  - `ggml_backend_load_best` enumerates a directory with `std::filesystem` and scores each `libggml-cpu-*.so` through its `ggml_backend_score`.
+  - So the libraries must be real files (legacy packaging).
+- `ggml/src/CMakeLists.txt` has an Android-specific variant list under `GGML_CPU_ALL_VARIANTS`.
+- AGP packages MODULE libraries of every built target. Its `targets` filter keeps only linked dependencies, so it would drop the backends.
+
+**Microphone from the accessibility service** (AOSP `main`):
+- `AccessibilityServiceConnection` binds the service with `BIND_INCLUDE_CAPABILITIES` (plus `BIND_FOREGROUND_SERVICE_WHILE_AWAKE`).
+- `OomAdjuster` passes the client's (system_server's) while-in-use capabilities through that flag.
+- So the process should be allowed to record without a foreground service. **Unconfirmed on-device.**
+
+**FUTO Keyboard** (`github.com/futo-org/android-keyboard`, FUTO Source First License 1.1-kb; read for behaviour only):
+- Voice input is its own copy of whisper.cpp (`native/jni/src/ggml/`, `org_futo_voiceinput_WhisperGGML`).
+- Models: `voiceinput-shared/.../Models.kt`. tiny.en is bundled; base.en/small.en download with SHA-256 pins.
+- `audio_ctx = clamp(ceil(n/320)+32, 160, 1500)`.
+
 ## 11b. Open technical questions
 
 - ~~Is `takeScreenshot` fast enough?~~ Yes: 9–32 ms (§3.5).
@@ -603,4 +776,9 @@ Re-verify only if the target platform changes.
 - On Android 13+, accessibility for sideloaded apps sits behind "restricted settings". Onboarding must walk the user through *App info → ⋮ → Allow restricted settings*.
 - The Digital assistant role replaces Gemini/Assistant, so "Hey Google" stops working. This is accepted.
 - In OCR's fixed bottom rows, a selection reaching the bottom of the screen (e.g. after Max) has its bottom handles under the toolbars. It can still be resized from the top or moved up.
+- **Microphone from the accessibility service** is reasoned from AOSP, not yet seen working (§11). If recording fails (silence or `AudioRecord` not initialized), the fallback is a microphone-type foreground service, which needs `FOREGROUND_SERVICE_MICROPHONE` and while-in-use eligibility.
+- **The ntfy delay probe** relies on the server checking the delay before the actions (true in current ntfy). On a server where that order differs, every probe would look "accepted" and the limit would read as 10 years; scheduling past the real limit would then fail on Confirm with the server's error.
+- **Transcripts are logged** (`PowerPP.Assistant`, info level) to help tune the parser and endpointing. Logcat is readable only over adb or by system apps. Drop the line once the assistant is tuned.
+- **Listening starts every time the panel opens** (when set up), so Android's microphone indicator shows each time. That's by design (user).
+- **The modal on small screens:** M3's `DatePicker` needs about 360 dp of width. The card leaves 376 dp on the Pixel 9 Pro XL, but would clip on 360 dp-wide phones.
 - The system may remove `TYPE_ACCESSIBILITY_OVERLAY` windows after screen-off or lock (XGesture's `FloatBallOverlay.kt` comments on this). The overlay must handle being removed externally.

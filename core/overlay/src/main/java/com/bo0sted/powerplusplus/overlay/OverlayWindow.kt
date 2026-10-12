@@ -50,7 +50,12 @@ class OverlayWindow(
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val savedStateController = SavedStateRegistryController.create(this)
     private val windowManager = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val blurListener = Consumer<Boolean> { enabled -> applyBackdrop(blurAvailable = enabled) }
+    private val blurListener = Consumer<Boolean> { enabled ->
+        blurAvailable = enabled
+        updateBackdrop()
+    }
+    private var blurAvailable = false
+    private var compact = false
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = onDismissRequest()
     }
@@ -108,12 +113,15 @@ class OverlayWindow(
      * Shrinks the window to its content's height at the top of the screen, or restores it to full
      * screen. The system draws the keyboard below accessibility overlays (layer 13 vs 31 in
      * `WindowManagerPolicy`) and only lifts it above activity windows, so the window must leave
-     * room for it while its content takes text input.
+     * room for it while its content takes text input. The backdrop is dropped meanwhile, since it
+     * would dim or blur the keyboard too.
      */
     fun setCompact(compact: Boolean) {
         val current = root ?: return
+        this.compact = compact
         val params = current.layoutParams as WindowManager.LayoutParams
         params.height = if (compact) WindowManager.LayoutParams.WRAP_CONTENT else WindowManager.LayoutParams.MATCH_PARENT
+        params.applyBackdrop()
         if (current.isAttachedToWindow) windowManager.updateViewLayout(current, params)
     }
 
@@ -130,26 +138,36 @@ class OverlayWindow(
         layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         // Draw under the status and navigation bars; content applies insets itself.
         fitInsetsTypes = 0
-        when (backdrop) {
-            OverlayBackdrop.None -> Unit
-            is OverlayBackdrop.Dim -> dim(backdrop)
-            // The first blur listener callback switches to the fallback if blur is unavailable.
-            is OverlayBackdrop.Blur -> blur(backdrop)
-        }
+        // Blur is assumed until the first blur listener callback says otherwise.
+        blurAvailable = true
+        applyBackdrop()
     }
 
-    private fun applyBackdrop(blurAvailable: Boolean) {
+    private fun updateBackdrop() {
         val current = root ?: return
-        val blur = backdrop as? OverlayBackdrop.Blur ?: return
         val params = current.layoutParams as WindowManager.LayoutParams
-        if (blurAvailable) params.blur(blur) else params.dim(blur.fallback)
+        params.applyBackdrop()
         if (current.isAttachedToWindow) windowManager.updateViewLayout(current, params)
+    }
+
+    private fun WindowManager.LayoutParams.applyBackdrop() {
+        when {
+            compact || backdrop == OverlayBackdrop.None -> clearBackdrop()
+            backdrop is OverlayBackdrop.Dim -> dim(backdrop)
+            backdrop is OverlayBackdrop.Blur -> if (blurAvailable) blur(backdrop) else dim(backdrop.fallback)
+        }
     }
 
     private fun WindowManager.LayoutParams.blur(blur: OverlayBackdrop.Blur) {
         flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND or WindowManager.LayoutParams.FLAG_DIM_BEHIND
         blurBehindRadius = blur.radiusPx
         dimAmount = blur.dimAmount
+    }
+
+    private fun WindowManager.LayoutParams.clearBackdrop() {
+        flags = flags and (WindowManager.LayoutParams.FLAG_DIM_BEHIND or WindowManager.LayoutParams.FLAG_BLUR_BEHIND).inv()
+        blurBehindRadius = 0
+        dimAmount = 0f
     }
 
     private fun WindowManager.LayoutParams.dim(dim: OverlayBackdrop.Dim) {

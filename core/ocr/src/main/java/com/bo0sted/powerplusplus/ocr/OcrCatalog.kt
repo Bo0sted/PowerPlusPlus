@@ -1,5 +1,8 @@
 package com.bo0sted.powerplusplus.ocr
 
+import com.bo0sted.powerplusplus.download.Downloadable
+import com.bo0sted.powerplusplus.download.RemoteFile
+
 /**
  * Everything OCR downloads, pinned to exact files from their official publishers. A file is
  * accepted only if its size and SHA-256 match, so a mirror can serve it as long as the bytes are
@@ -70,11 +73,11 @@ object OcrCatalog {
     const val RECOGNITION_CONFIG = "rec.yml"
 }
 
-data class OcrComponent(val id: String, val kind: Kind, val version: String, val files: List<RemoteFile>) {
+data class OcrComponent(
+    override val id: String,
+    val kind: Kind,
+    override val version: String,
+    override val files: List<RemoteFile>,
+) : Downloadable {
     enum class Kind { Engine, Model }
-
-    val downloadBytes: Long get() = files.sumOf { it.sizeBytes }
 }
-
-/** One file to download: tried from each of [urls] in order, accepted only if size and hash match. */
-data class RemoteFile(val name: String, val sizeBytes: Long, val sha256: String, val urls: List<String>)

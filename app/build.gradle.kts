@@ -18,6 +18,9 @@ android {
             // The ONNX Runtime engine is downloaded at runtime (core:ocr OrtEngine); only its Java
             // classes and the small JNI glue (libonnxruntime4j_jni.so) ship in the APK.
             excludes += "**/libonnxruntime.so"
+            // Installs native libraries as files: ggml finds its CPU backends (core:whisper) by
+            // listing the app's library directory.
+            useLegacyPackaging = true
         }
     }
 
@@ -36,6 +39,8 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:overlay"))
     implementation(project(":core:ocr"))
+    implementation(project(":core:assistant"))
+    implementation(project(":core:ntfy"))
 
     // Panel modules. Adding one here is all it takes to make it available in the editor.
     implementation(project(":module:powermenu"))
@@ -43,6 +48,9 @@ dependencies {
     implementation(project(":module:screenshot"))
     implementation(project(":module:ocrtext"))
     implementation(project(":module:mediaextractor"))
+
+    // Assistant commands, likewise.
+    implementation(project(":command:reminders"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

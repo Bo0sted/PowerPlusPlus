@@ -40,6 +40,8 @@ import com.bo0sted.powerplusplus.module.ActionModule
 import com.bo0sted.powerplusplus.module.ModuleHost
 import com.bo0sted.powerplusplus.module.ModuleRegistry
 import com.bo0sted.powerplusplus.module.ToggleModule
+import com.bo0sted.powerplusplus.ui.BackdropOutline
+import com.bo0sted.powerplusplus.ui.onBackdrop
 
 /**
  * The power panel: pages of module grids over a blurred or dimmed backdrop. Tapping anywhere that

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.bo0sted.powerplusplus.ui.onBackdrop
 
 /** The look of one module in a grid cell, shared by the panel and the layout editor. */
 @Composable
