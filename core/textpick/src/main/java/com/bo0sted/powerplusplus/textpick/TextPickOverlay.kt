@@ -48,7 +48,7 @@ fun showTextPick(service: AccessibilityService, blocks: List<TextBlock>) {
                         }
                     },
                     onClose = { window.dismiss() },
-                    onEditingChange = window::setCompact,
+                    onEditingChange = window::setTyping,
                 )
             }
         }

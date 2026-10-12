@@ -59,23 +59,28 @@ import kotlin.math.sin
  * Hosts the panel [content] with the assistant: the voice wave at the bottom and, for a recognised
  * command, the command modal on top. The panel stays usable while the assistant listens.
  *
- * While a text field in the modal has focus, only the modal is drawn and [onCompactChange] asks the
- * window to shrink to it, so the keyboard (drawn below accessibility overlays) is visible.
+ * While a text field in the modal has focus, [onTypingChange] tells the window, which then ends where
+ * the keyboard (drawn below accessibility overlays) starts. Once it does ([aboveKeyboard]), this
+ * draws its own scrim in place of the window's backdrop and puts the modal on the keys.
  */
 @Composable
 fun AssistantOverlay(
     session: AssistantSession,
+    aboveKeyboard: Boolean,
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit,
-    onCompactChange: (Boolean) -> Unit,
+    onTypingChange: (Boolean) -> Unit,
     content: @Composable () -> Unit,
 ) {
     val draft = session.modal.draft
-    val compact = draft != null && session.editingText
-    LaunchedEffect(compact) { onCompactChange(compact) }
+    val typing = draft != null && session.editingText
+    LaunchedEffect(typing) { onTypingChange(typing) }
+    val docked = typing && aboveKeyboard
 
-    Box(if (compact) Modifier.fillMaxWidth() else Modifier.fillMaxSize()) {
-        if (!compact) {
+    Box(Modifier.fillMaxSize()) {
+        if (docked) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = DOCKED_SCRIM)).pointerInput(Unit) { detectTapGestures { } })
+        } else {
             Column(
                 Modifier
                     .fillMaxSize()
@@ -89,10 +94,10 @@ fun AssistantOverlay(
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).pointerInput(Unit) { detectTapGestures { } })
             }
         }
-        // Always the last child, so the modal (and its focused field) survives switching to compact.
-        // Centred within thumb reach; while typing, the window shrinks to the modal right above the keyboard.
+        // Always the last child, so the modal (and its focused field) survives the switch.
+        // Centred within thumb reach; on the keyboard while typing.
         if (draft != null) {
-            PanelCommandModal(session, draft, compact, Modifier.align(if (compact) Alignment.TopCenter else Alignment.Center))
+            PanelCommandModal(session, draft, Modifier.align(if (docked) Alignment.BottomCenter else Alignment.Center))
         }
     }
 }
@@ -196,10 +201,10 @@ private fun DrawScope.wavePath(cycles: Float, phase: Float, amplitude: Float): P
 
 /** The [CommandModal] over the panel; it tells the session when a text field has focus. */
 @Composable
-private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, compact: Boolean, modifier: Modifier) {
+private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, modifier: Modifier) {
     val focusManager = LocalFocusManager.current
     LaunchedEffect(session.clearFocusRequests) { if (session.clearFocusRequests > 0) focusManager.clearFocus() }
-    // The display's height, not the window's: the window shrinks to the modal while typing.
+    // The display's height, not the window's: above the keyboard, the window's own bounds limit it.
     val screenHeight = with(LocalDensity.current) { LocalResources.current.displayMetrics.heightPixels.toDp() }
     CommandModal(
         state = session.modal,
@@ -209,8 +214,7 @@ private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, co
             .systemBarsPadding() // Not the keyboard inset: while typing, the keyboard is below this window.
             .padding(16.dp)
             .fillMaxWidth()
-            // Compact: leave the lower half for the keyboard.
-            .heightIn(max = screenHeight * if (compact) 0.45f else 0.8f)
+            .heightIn(max = screenHeight * 0.8f)
             .onFocusChanged { session.editingText = it.hasFocus }
             // Taps on the card don't reach the scrim; a tap outside a field ends typing.
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
@@ -218,3 +222,6 @@ private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, co
 }
 
 private val WAVE_HEIGHT = 112.dp
+
+/** Above the keyboard the window has no backdrop, so the scrim alone keeps the app behind dimmed. */
+private const val DOCKED_SCRIM = 0.6f

@@ -17,6 +17,9 @@ import android.widget.FrameLayout
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
@@ -57,7 +60,6 @@ class OverlayWindow(
         updateBackdrop()
     }
     private var blurAvailable = false
-    private var compact = false
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = onDismissRequest()
     }
@@ -113,60 +115,54 @@ class OverlayWindow(
     }
 
     /**
-     * Shrinks the window to its content's height, docked on top of the keyboard, or restores it to
-     * full screen. The system draws the keyboard below accessibility overlays (layer 13 vs 31 in
-     * `WindowManagerPolicy`) and only lifts it above activity windows, so the window must leave
-     * room for it while its content takes text input. The backdrop is dropped meanwhile, since it
-     * would dim or blur the keyboard too.
-     *
-     * The keyboard's top comes from its accessibility window, whose bounds are its touchable area
-     * (`AccessibilityWindowsPopulator`). It's re-read whenever the system reports a window change
-     * (the keyboard opening, closing or resizing), through the service's [WindowChanges]; until a
-     * keyboard shows, the window sits at the top of the screen.
+     * True while [setTyping] is on **and** the keyboard is up: the window then covers only the screen
+     * above the keyboard, without its backdrop. Compose state, so content can lay itself out for it
+     * (e.g. draw its own scrim and sit at the bottom, on the keys).
      */
-    fun setCompact(compact: Boolean) {
-        val current = root ?: return
-        this.compact = compact
-        val params = current.layoutParams as WindowManager.LayoutParams
-        params.height = if (compact) WindowManager.LayoutParams.WRAP_CONTENT else WindowManager.LayoutParams.MATCH_PARENT
-        params.applyBackdrop()
-        keyboardTop = null
-        params.dockAbove(null)
-        if (current.isAttachedToWindow) windowManager.updateViewLayout(current, params)
+    var aboveKeyboard by mutableStateOf(false)
+        private set
+
+    /**
+     * Content is taking text input (or no longer is). The system draws the keyboard below
+     * accessibility overlays (layer 13 vs 31 in `WindowManagerPolicy`) and only lifts it above
+     * activity windows, so once the keyboard is up the window ends where the keyboard starts. The
+     * backdrop is dropped meanwhile, since it would dim or blur the keyboard too.
+     *
+     * Nothing changes until the keyboard is actually there, so there's a single switch instead of a
+     * jump to an intermediate layout. The keyboard's top comes from its accessibility window, whose
+     * bounds are its touchable area (`AccessibilityWindowsPopulator`), and is re-read whenever the
+     * system reports a window change (the keyboard opening, closing or resizing), through the
+     * service's [WindowChanges]: no polling.
+     */
+    fun setTyping(typing: Boolean) {
+        if (root == null || typing == this.typing) return
+        this.typing = typing
         val changes = service as? WindowChanges
-        if (compact) {
-            changes?.addWindowsChangedListener(keyboardTracker)
-            keyboardTracker.run() // The keyboard may already be up.
-        } else {
-            changes?.removeWindowsChangedListener(keyboardTracker)
-        }
+        if (typing) changes?.addWindowsChangedListener(keyboardTracker) else changes?.removeWindowsChangedListener(keyboardTracker)
+        keyboardTracker.run() // The keyboard may already be up (or must be let go of).
     }
 
+    private var typing = false
     private var keyboardTop: Int? = null
 
-    /** Docks on the keyboard's current top; runs on each window change while compact. */
+    /** Fits the window above the keyboard, or back to full screen; on each window change while typing. */
     private val keyboardTracker = Runnable {
         val current = root ?: return@Runnable
-        if (!compact || !current.isAttachedToWindow) return@Runnable
-        val top = service.windows
-            .firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
-            ?.let { Rect().also(it::getBoundsInScreen).top }
+        val top = if (typing) {
+            service.windows
+                .firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+                ?.let { Rect().also(it::getBoundsInScreen).top }
+                ?.takeIf { it > 0 }
+        } else {
+            null
+        }
         if (top == keyboardTop) return@Runnable
         keyboardTop = top
+        aboveKeyboard = top != null
         val params = current.layoutParams as WindowManager.LayoutParams
-        params.dockAbove(top)
-        windowManager.updateViewLayout(current, params)
-    }
-
-    /** Bottom edge on [keyboardTop] (screen y), or at the top of the screen without a keyboard. */
-    private fun WindowManager.LayoutParams.dockAbove(keyboardTop: Int?) {
-        if (keyboardTop == null) {
-            gravity = Gravity.TOP or Gravity.START
-            y = 0
-        } else {
-            gravity = Gravity.BOTTOM or Gravity.START
-            y = windowManager.currentWindowMetrics.bounds.height() - keyboardTop
-        }
+        params.height = top ?: WindowManager.LayoutParams.MATCH_PARENT
+        params.applyBackdrop()
+        if (current.isAttachedToWindow) windowManager.updateViewLayout(current, params)
     }
 
     private fun layoutParams() = WindowManager.LayoutParams(
@@ -196,7 +192,7 @@ class OverlayWindow(
 
     private fun WindowManager.LayoutParams.applyBackdrop() {
         when {
-            compact || backdrop == OverlayBackdrop.None -> clearBackdrop()
+            keyboardTop != null || backdrop == OverlayBackdrop.None -> clearBackdrop()
             backdrop is OverlayBackdrop.Dim -> dim(backdrop)
             backdrop is OverlayBackdrop.Blur -> if (blurAvailable) blur(backdrop) else dim(backdrop.fallback)
         }

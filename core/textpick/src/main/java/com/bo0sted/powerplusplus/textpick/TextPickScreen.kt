@@ -106,8 +106,8 @@ class TextPickState(val blocks: List<TextBlock>) {
  * The bottom toolbar opens the list, which can be scrolled and whose entries can be edited or
  * removed. Picked boxes are green, edited ones red. Copy copies the list, edits included, one per line.
  *
- * Editing shows only a card at the top with a text field: the owner shrinks the window
- * ([onEditingChange]) so the keyboard, which the system draws below overlays, stays visible.
+ * Editing shows only a card at the top with a text field: the owner fits the window above the
+ * keyboard ([onEditingChange]), which the system draws below overlays.
  *
  * Over a [background], the image and its boxes can be pinched to zoom (up to 6×) and panned, like
  * a photo; taps still pick the box under the finger. While zoomed at all, Reset zoom appears just

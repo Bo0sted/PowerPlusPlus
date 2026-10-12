@@ -160,7 +160,7 @@ class OcrTextModule @Inject constructor(private val recognizer: TextRecognizer) 
                             }
                         },
                         onClose = ::close,
-                        onEditingChange = window::setCompact,
+                        onEditingChange = window::setTyping,
                         background = bitmap,
                         closeOnTapOutside = false,
                     )

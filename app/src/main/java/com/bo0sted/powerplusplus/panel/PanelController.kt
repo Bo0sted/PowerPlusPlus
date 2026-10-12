@@ -137,9 +137,10 @@ class PanelController @Inject constructor(
             PowerTheme(darkTheme = true) {
                 AssistantOverlay(
                     session = assistantSession,
+                    aboveKeyboard = overlay.aboveKeyboard,
                     onDismiss = ::dismiss,
                     onOpenSettings = { openSettings(host) },
-                    onCompactChange = overlay::setCompact,
+                    onTypingChange = overlay::setTyping,
                 ) {
                     PanelScreen(
                         config = current,
