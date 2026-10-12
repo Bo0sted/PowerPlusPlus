@@ -5,6 +5,7 @@
     <string name="reminder_needs_ntfy">Needs ntfy, set up above</string>
 
     <string name="reminder_title">Reminder</string>
+    <string name="reminder_edit_title">Edit reminder</string>
     <string name="reminder_text_label">Remind me to</string>
     <string name="reminder_early_heading">Early reminders</string>
     <string name="reminder_early_add">Add early reminder</string>
@@ -24,6 +25,22 @@
 
     <string name="reminder_notification_title">Reminder</string>
     <string name="reminder_early_title">Reminder coming up in %1$s</string>
+
+    <string name="upcoming_title">Upcoming reminders</string>
+    <string name="upcoming_description">See, change and delete scheduled reminders, or add one. Read from your ntfy server; Power++ keeps no copy.</string>
+    <string name="upcoming_back">Back</string>
+    <string name="upcoming_refresh">Refresh</string>
+    <string name="upcoming_new">New reminder</string>
+    <string name="upcoming_empty">No upcoming reminders</string>
+    <string name="upcoming_failed">Couldn\'t reach ntfy: %1$s</string>
+    <string name="upcoming_delete">Delete</string>
+    <string name="upcoming_delete_title">Delete reminder?</string>
+    <string name="upcoming_delete_body">“%1$s” and its early reminders will be cancelled on the ntfy server.</string>
+    <string name="upcoming_cancel">Cancel</string>
+    <plurals name="upcoming_early">
+        <item quantity="one">%d early reminder</item>
+        <item quantity="other">%d early reminders</item>
+    </plurals>
 
     <plurals name="reminder_minutes">
         <item quantity="one">%d minute</item>

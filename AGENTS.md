@@ -11,7 +11,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 - **Reminders** delivered by **ntfy**
 - a "Whisper assistant" settings section
 
-Built, unit-tested, lint clean and installed; **not yet tried by the user on-device**. Not pushed.
+The user confirmed it works on the phone. Then added **Upcoming reminders** (§3.8): a screen that reads the reminders back from ntfy each time it opens, and edits, deletes and adds them with the same modal. Built, tested and installed; not yet tried by the user. Not pushed.
 
 **Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Then built the **Media extractor** module and a **Scan** button in Smart screenshot (§3.7). Pushed by the user on 2026-10-10 (§10).
 
@@ -23,16 +23,7 @@ Built, unit-tested, lint clean and installed; **not yet tried by the user on-dev
   - Smart screenshot, both the selection and the editor (§3.4); not re-checked since its selection moved to `:core:selection` (§10)
   - the activation screenshot and Retake (§3.5, §3.5b)
   - the OCR engine/model manager, with ORT telemetry disabled (§4)
-- **Next action:** have the user try the Whisper assistant (§3.8):
-  1. Download base.en and allow the microphone.
-  2. Set up ntfy and turn Reminders on.
-  3. Open the panel and say "Remind me in 5 minutes to test Power++".
-
-  Read `PowerPP.Assistant` / `PowerPP.Whisper` in logcat (transcripts are logged at info level). Check first:
-  - that recording works from the accessibility service (§12)
-  - transcription speed
-  - the keyboard in compact mode
-  - the date and time pickers inside the modal
+- **Next action:** have the user try **Upcoming reminders** (Settings → Whisper assistant): list, edit (including times and early reminders), delete, and New reminder. The user is raising their own ntfy server's `message-delay-limit` (§11); afterwards **Re-check limit** should show the new value. Transcripts are logged at info level under `PowerPP.Assistant` / `PowerPP.Whisper`.
 
   Still pending from session 3: Media extractor and Smart screenshot's Scan on real apps (the user mostly browses in **Firefox**; tune `MediaScan` from that, §3.7), and re-checking Smart screenshot and Screen text (§10). The open question for the user is in §7 (Small model).
 - **Home machine before building:**
@@ -384,7 +375,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - **No Compose dialogs or popups in overlays:** they need an activity window token. Date and time pickers are pages inside the card.
 
 **Commands** (`AssistantCommand` SPI, `@IntoSet`, like panel modules):
-- Each command has `id`, `title`, `description`, `available: Flow<Boolean>` (its requirements) and `requirement` (what to set up).
+- Each command has `id`, `title`, `description`, `available: Flow<Boolean>` (its requirements), `requirement` (what to set up) and optionally `screen: CommandScreen` (a title, a description and `open(context)`). The settings section lists each screen under its command, enabled while the command is available.
 - `AssistantCommands` stores the user's switches in `assistant.json`. A command is on only while switched on **and** available; the switch itself is kept.
 
 **ntfy** (`:core:ntfy`, verified in the ntfy server source on 2026-10-12, §11):
@@ -411,7 +402,20 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **Sending:** one scheduled JSON publish per notification (`delay` = Unix seconds).
   - The main notification is titled "Reminder" (tag `alarm_clock`); early ones "Reminder coming up in …" (`hourglass_flowing_sand`).
   - Sequence IDs `powerpp-<id>-<n>`, so confirming again after a partial failure replaces instead of duplicating.
-  - Power++ keeps no reminder list, alarms or notifications of its own (the user: ntfy handles notifications).
+  - Power++ keeps no reminder list, alarms or notifications of its own (the user: ntfy handles notifications, and Power++ stores nothing).
+
+**Upcoming reminders** (user, 2026-10-12; `RemindersActivity`, opened from the settings row that `AssistantCommand.screen` provides):
+- **Read from ntfy every time the screen starts** (`ON_START`), and after each change: `GET /<topic>/json?poll=1&sched=1&since=<now>`.
+- `Reminders.group` (pure, unit-tested) rebuilds reminders from that:
+  - keeps `event == "message"`, time after now, sequence ID `powerpp-<12 hex>-<n>`
+  - n = 0 is the reminder; n ≥ 1 are early reminders, whose lead time is the reminder's time minus theirs
+  - a group without n = 0 is dropped
+  - early reminders already delivered aren't listed
+- **Edit** opens the same `ReminderDraft` in the same `CommandModal`, titled "Edit reminder", with early reminders shown in their largest exact unit. Confirm republishes under IDs 0…k, which replaces those messages, and deletes the reminder's other old IDs.
+- **Delete** (asks first) sends `DELETE /<topic>/<id>` for each of its IDs.
+- **New reminder** opens an empty draft at the current date and time (the user's choice, since nothing was spoken). It needs moving forward before Confirm enables.
+- The modal is a Compose `Dialog` there: activities allow dialogs, and the keyboard resizes the window normally. Back steps back within the draft, then closes the modal; taps outside are ignored.
+- **Shared with the panel:** `CommandModalState` (draft, confirming, error; `open`/`cancel`/`confirm(scope)`/`onBack`) and the `CommandModal` card live in `:core:assistant`. The panel wraps the card with focus tracking for compact mode.
 
 **Settings** (`AssistantSection`, `AssistantViewModel`):
 - The model rows reuse `ComponentRow`, now shared with the OCR section.
@@ -527,7 +531,7 @@ The settings list, the switch and the modal pick it up automatically.
 
 **Commands:**
 - `./gradlew :app:assembleDebug` builds the debug APK.
-- Unit tests: `./gradlew testDebugUnitTest` (88 tests, all pass, 2026-10-12).
+- Unit tests: `./gradlew testDebugUnitTest` (90 tests, all pass, 2026-10-12).
 - **First checkout:** `git submodule update --init` fetches whisper.cpp (`third_party/whisper.cpp`, pinned to v1.9.5). The first build compiles it for three ABIs (a few minutes); later builds reuse it.
 - Lint for everything: `./gradlew lintDebug`.
 - Install on the device: `./gradlew :app:installDebug` (needs `adb connect <ip:port>` first).
@@ -621,6 +625,7 @@ All decisions are from 2026-10-08.
 - **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
 - **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
+- **Upcoming reminders come only from ntfy** (user, 2026-10-12): Power++ stores nothing and queries the server each time the list opens. Editing and deleting go through sequence IDs; new and edited reminders use the same modal as spoken ones; a new one starts at the current date and time.
 - **Reuse over duplication** (user): the OCR downloader became `:core:download`, the panel's JSON DataStore became `jsonDataStore`, the OCR component row became `ComponentRow`, and the backdrop text style moved to `:core:ui`.
 
 ## 9. XGesture reference map
@@ -661,7 +666,7 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 
 **Session 3 (2026-10-09):** in-window messages replace every toast (Smart screenshot, its editor, Screen text, the "Copied" confirmation on API ≤ 32); the unused first-design OCR strings (`ocr_hint_cursor`, `ocr_hint_drag`, `ocr_reset`) were removed. Built, unit-tested, lint clean and installed on the phone; **not yet checked by the user on-device.** Then Media extractor and Smart screenshot's Scan (§3.7), with the shared `:core:media`, `OverlayBar` family and `forEachScreenNode`. Screen text now reads nodes through `forEachScreenNode`, and OCR text's selection screen uses the `OverlayBar` family (no behaviour change intended). `TextPickScreen`'s toolbar and Smart screenshot's floating toolbars still draw their own pills. Same status: built, tested, lint clean, installed, not yet checked by the user.
 
-**Session 4 (2026-10-12):** the Whisper assistant, ntfy and Reminders (§3.8), with the shared `:core:download`, `jsonDataStore`, `ComponentRow` and `OverlayWindow.setCompact` dropping the backdrop. Built, 88 unit tests passing, lint at zero issues, installed on the phone. Read-only checks: the native libraries were extracted, all 7 ggml CPU variants are present, and the service process runs with no crashes. **Not yet tried by the user.** Also needs re-checking: the OCR downloads (moved onto `ComponentStore`) and OCR's edit card (`setCompact` changed).
+**Session 4 (2026-10-12):** the Whisper assistant, ntfy and Reminders (§3.8), with the shared `:core:download`, `jsonDataStore`, `ComponentRow` and `OverlayWindow.setCompact` dropping the backdrop. Built, 88 unit tests passing, lint at zero issues, installed on the phone. Read-only checks: the native libraries were extracted, all 7 ggml CPU variants are present, and the service process runs with no crashes. **Confirmed working by the user** (the assistant and a spoken reminder). Then Upcoming reminders: built, 90 tests, lint clean, installed, not yet tried. Also needs re-checking: the OCR downloads (moved onto `ComponentStore`) and OCR's edit card (`setCompact` changed).
 
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
@@ -744,6 +749,9 @@ Re-verify only if the target platform changes.
   - Match the topic rule `^[-_A-Za-z0-9]{1,64}$`.
   - Publishing with an existing sequence ID deletes the scheduled message with that ID first (`DeleteScheduledBySequenceID`).
   - `DELETE /<topic>/<sequence_id>` cancels one.
+- **Reading scheduled messages back:** `GET /<topic>/json?poll=1&sched=1&since=<unix>` (aliases `sched`/`scheduled`) returns cached messages with `time >= since`, including unpublished (scheduled) ones. That's the SQLite/Postgres `…IncludeScheduled` query. They're NDJSON objects with `event`, `time`, `message`, `title`, `sequence_id` (omitted if equal to the ID), sorted by time. A large topic may be cut to the newest (`X-Messages-Truncated`).
+- `DELETE /<topic>/<sequence_id>` (or `GET …/<sequence_id>/delete`) needs write access. It removes a scheduled message and sends a `message_delete` event to subscribers.
+- **The delay limit can't be turned off:** `message-delay-limit` in `server.yml` (env `NTFY_MESSAGE_DELAY_LIMIT`) is a duration such as `"3650d"`, and the check is always applied. A scheduled message's expiry counts from its delivery time (`m.Time` + the cache duration), so long delays are safe. Power++ measures at most 10 years.
 - Errors are JSON `{"code", "http", "error", "link"}`. Access tokens are sent as `Authorization: Bearer tk_…`.
 
 **whisper.cpp v1.9.5 and ggml** (`third_party/whisper.cpp`):
@@ -777,6 +785,7 @@ Re-verify only if the target platform changes.
 - The Digital assistant role replaces Gemini/Assistant, so "Hey Google" stops working. This is accepted.
 - In OCR's fixed bottom rows, a selection reaching the bottom of the screen (e.g. after Max) has its bottom handles under the toolbars. It can still be resized from the top or moved up.
 - **Microphone from the accessibility service** is reasoned from AOSP, not yet seen working (§11). If recording fails (silence or `AudioRecord` not initialized), the fallback is a microphone-type foreground service, which needs `FOREGROUND_SERVICE_MICROPHONE` and while-in-use eligibility.
+- **Upcoming reminders exist only in the ntfy server's message cache.** Without a `cache-file`, ntfy keeps it in memory, so a server restart drops every scheduled reminder (they would never be delivered either). Self-hosted servers should set `cache-file`.
 - **The ntfy delay probe** relies on the server checking the delay before the actions (true in current ntfy). On a server where that order differs, every probe would look "accepted" and the limit would read as 10 years; scheduling past the real limit would then fail on Confirm with the server's error.
 - **Transcripts are logged** (`PowerPP.Assistant`, info level) to help tune the parser and endpointing. Logcat is readable only over adb or by system apps. Drop the line once the assistant is tuned.
 - **Listening starts every time the panel opens** (when set up), so Android's microphone indicator shows each time. That's by design (user).

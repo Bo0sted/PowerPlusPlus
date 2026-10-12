@@ -72,12 +72,7 @@ class AssistantSession internal constructor(
         private set
 
     /** The command being reviewed in the modal. Listening pauses while it's open. */
-    var draft by mutableStateOf<CommandDraft?>(null)
-        private set
-    var confirming by mutableStateOf(false)
-        private set
-    var confirmError by mutableStateOf<String?>(null)
-        private set
+    val modal = CommandModalState()
 
     /** True while a text field in the modal has focus; the window then makes room for the keyboard. */
     var editingText by mutableStateOf(false)
@@ -119,9 +114,9 @@ class AssistantSession internal constructor(
                     continue
                 }
                 notice = null
-                confirmError = null
-                draft = match
-                snapshotFlow { draft }.first { it == null } // Paused until the modal closes.
+                editingText = false
+                modal.open(match)
+                snapshotFlow { modal.draft }.first { it == null } // Paused until the modal closes.
             }
         } catch (e: CancellationException) {
             throw e
@@ -140,41 +135,12 @@ class AssistantSession internal constructor(
         }
     }
 
-    fun cancelDraft() {
-        if (confirming) return
-        editingText = false
-        draft = null
-    }
-
-    fun confirmDraft() {
-        val current = draft ?: return
-        if (confirming) return
-        confirming = true
-        confirmError = null
-        scope.launch {
-            try {
-                current.confirm()
-                editingText = false
-                if (draft === current) draft = null
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Command failed", e)
-                confirmError = e.message ?: e.javaClass.simpleName
-            } finally {
-                confirming = false
-            }
-        }
-    }
+    fun confirmDraft() = modal.confirm(scope) { editingText = false }
 
     /** Back: leaves text editing, then steps back within the modal, then closes it. False if there's no modal. */
     fun onBack(): Boolean {
-        val current = draft ?: return false
-        when {
-            editingText -> clearFocusRequests++
-            current.onBack() -> Unit
-            else -> cancelDraft()
-        }
+        if (modal.draft == null) return false
+        if (editingText) clearFocusRequests++ else modal.onBack()
         return true
     }
 

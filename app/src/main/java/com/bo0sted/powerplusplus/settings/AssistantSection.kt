@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,11 +14,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -32,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -43,6 +48,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bo0sted.powerplusplus.R
+import com.bo0sted.powerplusplus.assistant.CommandScreen
 import com.bo0sted.powerplusplus.download.ComponentState
 import com.bo0sted.powerplusplus.ntfy.NtfyServer
 import com.bo0sted.powerplusplus.ntfy.NtfySettings
@@ -101,6 +107,7 @@ internal fun AssistantSection(viewModel: AssistantViewModel = hiltViewModel()) {
                     enabled = available,
                     onCheckedChange = { viewModel.setOn(command, it) },
                 )
+                command.screen?.let { screen -> ScreenRow(screen, enabled = available) }
             }
         }
     }
@@ -210,6 +217,23 @@ private fun SavedServer(server: NtfyServer) {
         else -> pluralStringResource(R.plurals.ntfy_minutes, (seconds / 60).toInt(), (seconds / 60).toInt())
     }
     Body(stringResource(R.string.ntfy_saved, "${server.url.removePrefix("https://")}/${server.topic}", limit))
+}
+
+/** Opens a command's own screen (e.g. upcoming reminders). */
+@Composable
+private fun ScreenRow(screen: CommandScreen, enabled: Boolean) {
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = enabled) { screen.open(context) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f).alpha(if (enabled) 1f else 0.38f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(screen.title), style = MaterialTheme.typography.titleSmall)
+            Body(stringResource(screen.description))
+        }
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, modifier = Modifier.alpha(if (enabled) 1f else 0.38f))
+    }
 }
 
 @Composable

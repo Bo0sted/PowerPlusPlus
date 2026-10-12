@@ -14,7 +14,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,10 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -79,7 +74,7 @@ fun AssistantOverlay(
     onCompactChange: (Boolean) -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val draft = session.draft
+    val draft = session.modal.draft
     val compact = draft != null && session.editingText
     LaunchedEffect(compact) { onCompactChange(compact) }
 
@@ -99,7 +94,7 @@ fun AssistantOverlay(
             }
         }
         // Always the last child, so the modal (and its focused field) survives switching to compact.
-        if (draft != null) CommandModal(session, draft, compact)
+        if (draft != null) PanelCommandModal(session, draft, compact)
     }
 }
 
@@ -235,16 +230,17 @@ private fun WhisperOrb(level: Float, busy: Boolean) {
     }
 }
 
-/** The shared modal for a recognised command: its settings, then Cancel or Confirm. */
+/** The [CommandModal] at the top of the panel; it tells the session when a text field has focus. */
 @Composable
-private fun CommandModal(session: AssistantSession, draft: CommandDraft, compact: Boolean) {
+private fun PanelCommandModal(session: AssistantSession, draft: CommandDraft, compact: Boolean) {
     val focusManager = LocalFocusManager.current
     LaunchedEffect(session.clearFocusRequests) { if (session.clearFocusRequests > 0) focusManager.clearFocus() }
     // The display's height, not the window's: the window shrinks to the modal while typing.
     val screenHeight = with(LocalDensity.current) { LocalResources.current.displayMetrics.heightPixels.toDp() }
-    val problem = draft.problem()
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    CommandModal(
+        state = session.modal,
+        draft = draft,
+        onConfirm = session::confirmDraft,
         modifier = Modifier
             .statusBarsPadding()
             .padding(16.dp)
@@ -254,28 +250,7 @@ private fun CommandModal(session: AssistantSession, draft: CommandDraft, compact
             .onFocusChanged { session.editingText = it.hasFocus }
             // Taps on the card don't reach the scrim; a tap outside a field ends typing.
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(draft.title(), style = MaterialTheme.typography.headlineSmall)
-            // Not scrolled here: content with its own lazy lists (a date picker's years) can't be.
-            Box(Modifier.weight(1f, fill = false)) { draft.Content() }
-            (session.confirmError ?: problem)?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                TextButton(onClick = session::cancelDraft, enabled = !session.confirming) {
-                    Text(stringResource(R.string.command_cancel))
-                }
-                Button(onClick = session::confirmDraft, enabled = problem == null && !session.confirming) {
-                    if (session.confirming) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Text(stringResource(R.string.command_confirm))
-                    }
-                }
-            }
-        }
-    }
+    )
 }
 
 private val WAVE_HEIGHT = 112.dp

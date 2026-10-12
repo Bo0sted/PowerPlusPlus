@@ -24,6 +24,17 @@ data class NtfyMessage(
     @SerialName("sequence_id") val sequenceId: String? = null,
 )
 
+/** A message as the server returns it when polled (only the fields Power++ reads). */
+@Serializable
+data class NtfyReceived(
+    val event: String,
+    /** Unix seconds; for a scheduled message, when it will be delivered. */
+    val time: Long,
+    val message: String = "",
+    val title: String = "",
+    @SerialName("sequence_id") val sequenceId: String? = null,
+)
+
 /** Something the server refused, with its own explanation; or a network failure ([code] null). */
 class NtfyException(message: String, val code: Int? = null, cause: Throwable? = null) : IOException(message, cause)
 
@@ -35,7 +46,24 @@ object NtfyClient {
 
     /** Publishes [message]; throws [NtfyException] with the server's reason if it isn't accepted. */
     suspend fun publish(server: NtfyServer, message: NtfyMessage) {
-        val (status, body) = post(server, server.url, json.encodeToString(NtfyMessage.serializer(), message), emptyMap())
+        val (status, body) = request(server, "POST", server.url, json.encodeToString(NtfyMessage.serializer(), message), emptyMap())
+        if (status != HttpURLConnection.HTTP_OK) throw refusal(status, body)
+    }
+
+    /**
+     * Every message on the topic at or after [since] (Unix seconds), **including scheduled ones not
+     * delivered yet** (`poll=1&sched=1`), oldest first. Power++ keeps no copy of what it scheduled:
+     * this is how it reads them back.
+     */
+    suspend fun poll(server: NtfyServer, since: Long): List<NtfyReceived> {
+        val (status, body) = request(server, "GET", "${server.url}/${server.topic}/json?poll=1&sched=1&since=$since", null, emptyMap())
+        if (status != HttpURLConnection.HTTP_OK) throw refusal(status, body)
+        return body.lineSequence().filter { it.isNotBlank() }.map { json.decodeFromString(NtfyReceived.serializer(), it) }.toList()
+    }
+
+    /** Cancels the scheduled message [sequenceId] (`DELETE /<topic>/<sequence_id>`). */
+    suspend fun delete(server: NtfyServer, sequenceId: String) {
+        val (status, body) = request(server, "DELETE", "${server.url}/${server.topic}/$sequenceId", null, emptyMap())
         if (status != HttpURLConnection.HTTP_OK) throw refusal(status, body)
     }
 
@@ -51,7 +79,7 @@ object NtfyClient {
      */
     suspend fun probeDelayLimit(server: NtfyServer): Long? = findDelayLimit { seconds ->
         val headers = mapOf("X-Delay" to "${seconds}s", "X-Actions" to "invalid")
-        val (status, body) = post(server, "${server.url}/${server.topic}", "Power++ delay check", headers)
+        val (status, body) = request(server, "POST", "${server.url}/${server.topic}", "Power++ delay check", headers)
         when (val code = errorCode(body)) {
             ERROR_ACTIONS_INVALID -> true
             ERROR_DELAY_TOO_LARGE -> false
@@ -74,20 +102,22 @@ object NtfyClient {
     /** The scheduled-delivery value for [time]. */
     fun delayAt(time: Instant): String = time.epochSecond.toString()
 
-    private suspend fun post(server: NtfyServer, url: String, body: String, headers: Map<String, String>): Pair<Int, String> =
+    private suspend fun request(server: NtfyServer, method: String, url: String, body: String?, headers: Map<String, String>): Pair<Int, String> =
         withContext(Dispatchers.IO) {
             try {
                 val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
+                    requestMethod = method
                     connectTimeout = TIMEOUT_MS
                     readTimeout = TIMEOUT_MS
-                    doOutput = true
-                    setRequestProperty("Content-Type", "text/plain; charset=utf-8")
                     if (server.token.isNotBlank()) setRequestProperty("Authorization", "Bearer ${server.token}")
                     headers.forEach(::setRequestProperty)
+                    if (body != null) {
+                        doOutput = true
+                        setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                    }
                 }
                 try {
-                    connection.outputStream.use { it.write(body.encodeToByteArray()) }
+                    if (body != null) connection.outputStream.use { it.write(body.encodeToByteArray()) }
                     val status = connection.responseCode
                     val stream = if (status in 200..299) connection.inputStream else connection.errorStream
                     status to (stream?.use { it.readBytes().decodeToString() } ?: "")

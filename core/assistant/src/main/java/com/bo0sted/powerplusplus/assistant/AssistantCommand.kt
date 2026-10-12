@@ -1,5 +1,6 @@
 package com.bo0sted.powerplusplus.assistant
 
+import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import kotlinx.coroutines.flow.Flow
@@ -30,7 +31,13 @@ interface AssistantCommand {
 
     /** A draft for the command modal if [transcript] asks for this command, else `null`. */
     fun draftFor(transcript: String, now: ZonedDateTime): CommandDraft?
+
+    /** A screen of its own, listed in the assistant's settings (e.g. upcoming reminders); usable while [available]. */
+    val screen: CommandScreen? get() = null
 }
+
+/** A command's own screen: its name in the settings, and how to open it. */
+class CommandScreen(@get:StringRes val title: Int, @get:StringRes val description: Int, val open: (Context) -> Unit)
 
 /**
  * A recognised command the user reviews and adjusts in the shared command modal before it runs.

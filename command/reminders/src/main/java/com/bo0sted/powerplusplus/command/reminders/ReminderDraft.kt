@@ -45,11 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.bo0sted.powerplusplus.assistant.CommandDraft
-import com.bo0sted.powerplusplus.ntfy.NtfyClient
-import com.bo0sted.powerplusplus.ntfy.NtfyException
-import com.bo0sted.powerplusplus.ntfy.NtfyMessage
 import com.bo0sted.powerplusplus.ntfy.NtfyRepository
-import kotlinx.coroutines.flow.first
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -59,36 +55,39 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import java.time.temporal.ChronoUnit
-import java.util.UUID
 
 /**
- * A reminder being reviewed: what, when, and any number of early reminders ("Reminder coming up in
- * 2 hours"). Confirming hands every notification to ntfy as a scheduled message, so they arrive on
- * time even if this phone is off.
+ * A reminder being reviewed in the command modal: what, when, and any number of early reminders
+ * ("Reminder coming up in 2 hours"). Used for a spoken reminder, a new one from Upcoming reminders,
+ * and editing a scheduled one. Confirming hands every notification to ntfy as a scheduled message,
+ * so they arrive on time even if this phone is off.
  */
 internal class ReminderDraft(
     private val context: Context,
     private val ntfy: NtfyRepository,
-    parsed: ParsedReminder,
-    now: LocalDateTime,
+    private val reminders: Reminders,
+    private val reminder: Reminder,
 ) : CommandDraft {
 
-    private var text by mutableStateOf(parsed.text)
-    // No time spoken: the next full hour, to be adjusted.
-    private val initial = parsed.time ?: now.truncatedTo(ChronoUnit.HOURS).plusHours(1)
-    private var date by mutableStateOf(initial.toLocalDate())
-    private var time by mutableStateOf(initial.toLocalTime())
-    private val early = mutableStateListOf<EarlyReminder>()
+    private var text by mutableStateOf(reminder.text)
+    private var date by mutableStateOf(reminder.time.toLocalDate())
+    private var time by mutableStateOf(reminder.time.toLocalTime())
+    private val early = mutableStateListOf<EarlyReminder>().apply { addAll(reminder.early.map(EarlyReminder::of)) }
     private var page by mutableStateOf(Page.Form)
-
-    /** Sequence IDs derive from this, so confirming again after a failure replaces instead of duplicating. */
-    private val id = UUID.randomUUID().toString().replace("-", "").take(12)
 
     private enum class Page { Form, Date, Time }
 
     private data class EarlyReminder(val amount: String, val unit: EarlyUnit) {
         val duration: Duration? get() = amount.toLongOrNull()?.takeIf { it > 0 }?.let { unit.of(it) }
+
+        companion object {
+            /** In the largest unit that divides it exactly. */
+            fun of(duration: Duration): EarlyReminder = when {
+                duration.toMinutes() % (24 * 60) == 0L -> EarlyReminder("${duration.toDays()}", EarlyUnit.Days)
+                duration.toMinutes() % 60 == 0L -> EarlyReminder("${duration.toHours()}", EarlyUnit.Hours)
+                else -> EarlyReminder("${duration.toMinutes()}", EarlyUnit.Minutes)
+            }
+        }
     }
 
     enum class EarlyUnit(val of: (Long) -> Duration) {
@@ -98,7 +97,7 @@ internal class ReminderDraft(
     private fun at(): Instant = LocalDateTime.of(date, time).atZone(ZoneId.systemDefault()).toInstant()
 
     @Composable
-    override fun title() = stringResource(R.string.reminder_title)
+    override fun title() = stringResource(if (reminder.isScheduled) R.string.reminder_edit_title else R.string.reminder_title)
 
     override fun onBack(): Boolean {
         if (page == Page.Form) return false
@@ -116,41 +115,21 @@ internal class ReminderDraft(
             text.isBlank() -> stringResource(R.string.reminder_problem_text)
             at.isBefore(earliest) -> stringResource(R.string.reminder_problem_past)
             limit != null && at.isAfter(Instant.now().plusSeconds(limit)) ->
-                stringResource(R.string.reminder_problem_limit, formatDuration(Duration.ofSeconds(limit)))
+                stringResource(R.string.reminder_problem_limit, formatDuration(context, Duration.ofSeconds(limit)))
             early.any { it.duration == null } -> stringResource(R.string.reminder_problem_early_amount)
-            early.any { reminder -> reminder.duration?.let { at.minus(it).isBefore(earliest) } == true } -> stringResource(R.string.reminder_problem_early_past)
+            early.any { entry -> entry.duration?.let { at.minus(it).isBefore(earliest) } == true } -> stringResource(R.string.reminder_problem_early_past)
             else -> null
         }
     }
 
     override suspend fun confirm() {
-        val server = ntfy.settings.first().server ?: throw NtfyException(context.getString(R.string.reminder_needs_ntfy))
-        val at = at()
-        NtfyClient.publish(
-            server,
-            NtfyMessage(
-                topic = server.topic,
-                title = context.getString(R.string.reminder_notification_title),
-                message = text.trim(),
-                tags = listOf("alarm_clock"),
-                delay = NtfyClient.delayAt(at),
-                sequenceId = "powerpp-$id-0",
+        reminders.schedule(
+            reminder.copy(
+                text = text.trim(),
+                time = LocalDateTime.of(date, time),
+                early = early.mapNotNull { it.duration },
             ),
         )
-        early.forEachIndexed { index, reminder ->
-            val before = reminder.duration ?: return@forEachIndexed
-            NtfyClient.publish(
-                server,
-                NtfyMessage(
-                    topic = server.topic,
-                    title = context.getString(R.string.reminder_early_title, formatDuration(before)),
-                    message = text.trim(),
-                    tags = listOf("hourglass_flowing_sand"),
-                    delay = NtfyClient.delayAt(at.minus(before)),
-                    sequenceId = "powerpp-$id-${index + 1}",
-                ),
-            )
-        }
     }
 
     @Composable
@@ -183,9 +162,9 @@ internal class ReminderDraft(
             }
 
             Text(stringResource(R.string.reminder_early_heading), style = MaterialTheme.typography.titleSmall)
-            early.forEachIndexed { index, reminder ->
+            early.forEachIndexed { index, entry ->
                 EarlyRow(
-                    reminder = reminder,
+                    entry = entry,
                     onChange = { early[index] = it },
                     onRemove = { early.removeAt(index) },
                 )
@@ -198,11 +177,11 @@ internal class ReminderDraft(
     }
 
     @Composable
-    private fun EarlyRow(reminder: EarlyReminder, onChange: (EarlyReminder) -> Unit, onRemove: () -> Unit) {
+    private fun EarlyRow(entry: EarlyReminder, onChange: (EarlyReminder) -> Unit, onRemove: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = reminder.amount,
-                onValueChange = { value -> onChange(reminder.copy(amount = value.filter(Char::isDigit).take(4))) },
+                value = entry.amount,
+                onValueChange = { value -> onChange(entry.copy(amount = value.filter(Char::isDigit).take(4))) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.width(72.dp),
@@ -210,8 +189,8 @@ internal class ReminderDraft(
             SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
                 EarlyUnit.entries.forEachIndexed { index, unit ->
                     SegmentedButton(
-                        selected = reminder.unit == unit,
-                        onClick = { onChange(reminder.copy(unit = unit)) },
+                        selected = entry.unit == unit,
+                        onClick = { onChange(entry.copy(unit = unit)) },
                         shape = SegmentedButtonDefaults.itemShape(index, EarlyUnit.entries.size),
                         icon = {},
                     ) { Text(stringResource(unit.label)) }
@@ -222,7 +201,7 @@ internal class ReminderDraft(
             }
         }
         Text(
-            reminder.duration?.let { stringResource(R.string.reminder_early_before, formatDuration(it)) }.orEmpty(),
+            entry.duration?.let { stringResource(R.string.reminder_early_before, formatDuration(context, it)) }.orEmpty(),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -270,17 +249,6 @@ internal class ReminderDraft(
             TextButton(onClick = { page = Page.Form }) { Text(stringResource(R.string.reminder_page_back)) }
             TextButton(onClick = onDone) { Text(stringResource(R.string.reminder_page_done)) }
         }
-    }
-
-    /** "2 hours", "1 day 6 hours", "45 minutes": the largest two units, for titles and limits. */
-    private fun formatDuration(duration: Duration): String {
-        val parts = listOf(
-            R.plurals.reminder_days to duration.toDays(),
-            R.plurals.reminder_hours to duration.toHoursPart().toLong(),
-            R.plurals.reminder_minutes to duration.toMinutesPart().toLong(),
-        ).filter { it.second > 0 }.take(2)
-        if (parts.isEmpty()) return context.resources.getQuantityString(R.plurals.reminder_minutes, 0, 0)
-        return parts.joinToString(" ") { (res, n) -> context.resources.getQuantityString(res, n.toInt(), n.toInt()) }
     }
 
     private companion object {
