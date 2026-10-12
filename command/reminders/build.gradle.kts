@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
 }

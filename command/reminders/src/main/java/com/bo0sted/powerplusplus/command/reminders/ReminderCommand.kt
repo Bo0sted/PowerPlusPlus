@@ -12,6 +12,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
@@ -31,6 +32,10 @@ class ReminderCommand @Inject internal constructor(
     override val screen = CommandScreen(R.string.upcoming_title, R.string.upcoming_description) { from ->
         from.startActivity(Intent(from, RemindersActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
+
+    /** A new reminder with nothing spoken: empty, at the current date and time. */
+    fun newDraft(): CommandDraft =
+        ReminderDraft(context, ntfy, reminders, Reminder.new("", LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)))
 
     override fun draftFor(transcript: String, now: ZonedDateTime): CommandDraft? {
         val parsed = ReminderParser.parse(transcript, now.toLocalDateTime()) ?: return null

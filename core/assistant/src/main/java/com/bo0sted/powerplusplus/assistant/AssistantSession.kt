@@ -106,6 +106,8 @@ class AssistantSession internal constructor(
         model = loading
         try {
             while (true) {
+                // Paused while a modal is open (a spoken command's, or one opened from a module).
+                snapshotFlow { modal.draft }.first { it == null }
                 val stop = CompletableDeferred<Unit>()
                 stopListening = stop
                 // Its own job, so a tap can drop it (see onWaveTap) without ending the session.
@@ -134,7 +136,6 @@ class AssistantSession internal constructor(
                 notice = null
                 editingText = false
                 modal.open(match)
-                snapshotFlow { modal.draft }.first { it == null } // Paused until the modal closes.
             }
         } catch (e: CancellationException) {
             throw e
@@ -144,6 +145,14 @@ class AssistantSession internal constructor(
         } finally {
             current?.cancel()
         }
+    }
+
+    /** Opens [draft] in the modal (from a [CommandModule]); anything being heard is dropped. */
+    fun open(draft: CommandDraft) {
+        current?.cancel()
+        notice = null
+        editingText = false
+        modal.open(draft)
     }
 
     /**

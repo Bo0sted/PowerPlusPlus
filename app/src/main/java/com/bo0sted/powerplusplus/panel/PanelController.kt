@@ -11,6 +11,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bo0sted.powerplusplus.assistant.Assistant
 import com.bo0sted.powerplusplus.assistant.AssistantOverlay
 import com.bo0sted.powerplusplus.assistant.AssistantSession
+import com.bo0sted.powerplusplus.assistant.CommandModule
 import com.bo0sted.powerplusplus.data.Backdrop
 import com.bo0sted.powerplusplus.data.PanelConfig
 import com.bo0sted.powerplusplus.data.PanelRepository
@@ -145,8 +146,13 @@ class PanelController @Inject constructor(
                         registry = registry,
                         host = host,
                         onAction = { module ->
-                            dismiss(keepScreenshot = module.usesActivationScreenshot)
-                            host.scope.launch { module.run(host) }
+                            if (module is CommandModule) {
+                                // Its modal opens here, over the panel, like a spoken command's.
+                                assistantSession.open(module.newDraft())
+                            } else {
+                                dismiss(keepScreenshot = module.usesActivationScreenshot)
+                                host.scope.launch { module.run(host) }
+                            }
                         },
                         onToggle = { module: ToggleModule, on -> host.scope.launch { module.setOn(host, on) } },
                         onDismiss = ::dismiss,

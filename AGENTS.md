@@ -11,7 +11,13 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 - **Reminders** delivered by **ntfy**
 - a "Whisper assistant" settings section
 
-The user confirmed it works on the phone. Then added **Upcoming reminders** (§3.8): a screen that reads the reminders back from ntfy each time it opens, and edits, deletes and adds them with the same modal. Built, tested and installed; not yet tried by the user. Not pushed.
+The user confirmed it works on the phone. Then, in order:
+- **Upcoming reminders** (§3.8): a screen that reads the reminders back from ntfy each time it opens, and edits, deletes and adds them with the same modal.
+- a **priority** row (Max by default)
+- a **tappable wave without the logo**
+- a **New reminder** panel module that opens the modal over the panel
+
+All built, tested and installed. The user hasn't yet tried the module or the wave taps. Not pushed.
 
 **Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Then built the **Media extractor** module and a **Scan** button in Smart screenshot (§3.7). Pushed by the user on 2026-10-10 (§10).
 
@@ -23,7 +29,7 @@ The user confirmed it works on the phone. Then added **Upcoming reminders** (§3
   - Smart screenshot, both the selection and the editor (§3.4); not re-checked since its selection moved to `:core:selection` (§10)
   - the activation screenshot and Retake (§3.5, §3.5b)
   - the OCR engine/model manager, with ORT telemetry disabled (§4)
-- **Next action:** have the user try **Upcoming reminders** (Settings → Whisper assistant): list, edit (including times and early reminders), delete, and New reminder. The user is raising their own ntfy server's `message-delay-limit` (§11); afterwards **Re-check limit** should show the new value. Transcripts are logged at info level under `PowerPP.Assistant` / `PowerPP.Whisper`.
+- **Next action:** have the user try the **New reminder** module (add it in the layout editor; its modal should open over the panel) and the wave taps (finish, start over). Also try **Upcoming reminders** (Settings → Whisper assistant): list, edit (including times and early reminders), delete, and New reminder. The user is raising their own ntfy server's `message-delay-limit` (§11); afterwards **Re-check limit** should show the new value. Transcripts are logged at info level under `PowerPP.Assistant` / `PowerPP.Whisper`.
 
   Still pending from session 3: Media extractor and Smart screenshot's Scan on real apps (the user mostly browses in **Firefox**; tune `MediaScan` from that, §3.7), and re-checking Smart screenshot and Screen text (§10). The open question for the user is in §7 (Small model).
 - **Home machine before building:**
@@ -378,6 +384,9 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - **No Compose dialogs or popups in overlays:** they need an activity window token. Date and time pickers are pages inside the card.
 
 **Commands** (`AssistantCommand` SPI, `@IntoSet`, like panel modules):
+- **`CommandModule`** (`:core:assistant`): a panel module (an `ActionModule`) that provides `newDraft()`.
+  - `PanelController` doesn't close the panel for it: it calls `AssistantSession.open(draft)`, which drops anything being heard and opens the modal. `run` is never called.
+  - The session's listening loop waits while any modal is open, so this works whether or not the assistant is set up.
 - Each command has `id`, `title`, `description`, `available: Flow<Boolean>` (its requirements), `requirement` (what to set up) and optionally `screen: CommandScreen` (a title, a description and `open(context)`). The settings section lists each screen under its command, enabled while the command is available.
 - `AssistantCommands` stores the user's switches in `assistant.json`. A command is on only while switched on **and** available; the switch itself is kept.
 
@@ -421,9 +430,9 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **Edit** opens the same `ReminderDraft` in the same `CommandModal`, titled "Edit reminder", with early reminders shown in their largest exact unit. Confirm republishes under IDs 0…k, which replaces those messages, and deletes the reminder's other old IDs.
 - **Delete** (asks first) sends `DELETE /<topic>/<id>` for each of its IDs.
 - **New reminder** opens an empty draft at the current date and time (the user's choice, since nothing was spoken). It needs moving forward before Confirm enables.
-- **New reminder module** (user, 2026-10-12): `:module:newreminder` (typeId `new_reminder`, "New reminder"), an ordinary panel module wired to that same button.
-  - It starts `RemindersActivity.newReminderIntent`, whose extra makes the activity call `viewModel.create()` once (not again after rotation). So the same modal opens, with the same defaults and rules, over the list.
-  - The panel is already closed when a module runs. The start is allowed because `AccessibilityServiceConnection` binds with `BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS` (§11). **Not yet tried on-device.**
+- **New reminder module** (user, 2026-10-12): `:module:newreminder` (typeId `new_reminder`, "New reminder"), an ordinary panel module.
+  - It's a `CommandModule`: tapping it opens `ReminderCommand.newDraft()`, the same draft that Upcoming reminders' New reminder button opens, **in the panel's own modal**. The panel stays open, and the app isn't opened (the user rejected that first version, which started `RemindersActivity`).
+  - Back, Cancel and Confirm return to the panel, as for a spoken command. **Not yet tried on-device.**
 - The modal is a Compose `Dialog` there: activities allow dialogs, and the keyboard resizes the window normally. Back steps back within the draft, then closes the modal; taps outside are ignored.
 - **Shared with the panel:** `CommandModalState` (draft, confirming, error; `open`/`cancel`/`confirm(scope)`/`onBack`) and the `CommandModal` card live in `:core:assistant`. The panel wraps the card with focus tracking for compact mode.
 
@@ -513,7 +522,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 | `:core:assistant` | The assistant (§3.8): the `AssistantCommand`/`CommandDraft` SPI, `AssistantCommands` (registry and switches), `Assistant`/`AssistantSession`, `VoiceCapture` + `Endpointer` (unit-tested), and `AssistantOverlay` (the tappable voice wave and the command modal). Depends on nothing command-specific. |
 | `:core:textpick` | Shared text-selection overlay, used by Screen text and OCR text. `TextBlock(text, IntRect screen px)`; `normalizeTextBlocks` drops container summaries (blocks enclosing a smaller block), blanks and duplicates, and sorts in reading order. `hitTest` picks the smallest block under the tap, with 10dp slop. `TextPickState` + `PickList` (the selection list with edits; unit-tested), `ZoomViewport` (pinch-zoom maths; unit-tested), `TextPickScreen` (list panel, edit card, optional background with pinch-zoom, `closeOnTapOutside`), `showTextPick(service, blocks)`, `copyToClipboard`. |
 | `:command:*` | One per assistant command. They apply `powerpp.assistant.command` and bind themselves with `@Binds @IntoSet AssistantCommand`. Currently: `:command:reminders`. |
-| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`, `:module:mediaextractor`, `:module:newreminder` (opens `:command:reminders`' New reminder). |
+| `:module:*` | One per panel module. They apply `powerpp.panel.module` and bind themselves with `@Binds @IntoSet PanelModule`. Currently: `:module:powermenu`, `:module:screentext`, `:module:screenshot`, `:module:ocrtext`, `:module:mediaextractor`, `:module:newreminder` (a `CommandModule`: `:command:reminders`' New reminder modal over the panel). |
 | `:app` | Wiring: `PowerAccessibilityService` (publishes a `ModuleHost` via `ModuleHostProvider`), the assistant services (`assistant/`), `PanelController` + `PanelScreen` (`panel/`; the controller wraps the panel in `AssistantOverlay`), and the settings UI (`settings/`: setup checklist, layout editor, appearance, OCR, Whisper assistant; `ComponentRow` is shared by the download sections). |
 
 ### Adding a module type
@@ -635,7 +644,7 @@ All decisions are from 2026-10-08.
 - **Notifications through ntfy** (user, 2026-10-12): Power++ posts scheduled messages; ntfy delivers them. Power++ has no notification channel, alarm or exact-alarm permission.
   - Reminders are limited to the server's delay limit, which Power++ measures (ntfy has no API for it) and re-measures on request (user).
 - **ntfy settings are saved only after a successful test post** (user); any error refuses the save. Access token only, https only.
-- **New reminder module** (user, 2026-10-12): a normal panel module that triggers Upcoming reminders' New reminder button (same modal, same rules).
+- **New reminder module** (user, 2026-10-12): a normal panel module that opens the same New reminder modal (same rules) **over the panel**, without opening the app.
 - **Reminder priority** (user, 2026-10-12): pick it from a row of buttons in the modal, Max by default for every notification.
 - **Upcoming reminders come only from ntfy** (user, 2026-10-12): Power++ stores nothing and queries the server each time the list opens. Editing and deleting go through sequence IDs; new and edited reminders use the same modal as spoken ones; a new one starts at the current date and time.
 - **Reuse over duplication** (user): the OCR downloader became `:core:download`, the panel's JSON DataStore became `jsonDataStore`, the OCR component row became `ComponentRow`, and the backdrop text style moved to `:core:ui`.

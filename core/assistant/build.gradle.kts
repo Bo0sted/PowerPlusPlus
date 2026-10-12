@@ -10,6 +10,7 @@ android {
 }
 
 dependencies {
+    api(project(":core:module"))
     api(project(":core:whisper"))
     implementation(project(":core:data"))
     implementation(project(":core:ui"))

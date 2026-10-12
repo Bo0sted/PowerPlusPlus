@@ -7,5 +7,6 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:assistant"))
     implementation(project(":command:reminders"))
 }
