@@ -4,7 +4,7 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
-**Session 5 (2026-10-24, the home machine):** checked this file against the code again: every module and command id, constant, file name, pinned hash and URL, version, symbol and the 91-test count match. Only status lines were out of date, now fixed: session 4's commits are on `origin/main` (§10), and the New reminder module and the modal on the keyboard have been tried by the user (§3.8, §11). Then built **word selection** for Screen text (§3.2): a Word · Block row at the bottom, Word by default. Built, 96 tests passing, lint clean for our code, installed on the phone; **not yet tried by the user on-device.** Lint now reports 5 `:app` warnings, all about newer releases of pinned versions (Gradle 9.8.2, DataStore 1.3.0, kotlinx-serialization 1.12.0, ONNX Runtime 1.31.0); bumping them is separate work (ONNX Runtime needs §4's telemetry re-check and new catalog pins).
+**Session 5 (2026-10-24, the home machine):** checked this file against the code again: every module and command id, constant, file name, pinned hash and URL, version, symbol and the 91-test count match. Only status lines were out of date, now fixed: session 4's commits are on `origin/main` (§10), and the New reminder module and the modal on the keyboard have been tried by the user (§3.8, §11). Then built **word selection** for Screen text (§3.2): a Word · Block row at the bottom, Word by default. Built, 96 tests passing, installed on the phone; **not yet tried by the user on-device.** Then **bumped the versions lint flagged** (it had 5 "newer version available" warnings): Gradle 9.8.2, DataStore 1.3.0, kotlinx-serialization 1.12.0 and ONNX Runtime 1.31.0, each checked against its release notes or sources (§4, §6, §11). That found an upgrade bug, now fixed: an engine or model installed at an older version still counted as installed (§4, `ComponentState.Outdated`). Built, 98 tests, lint at zero issues again, installed. **On the phone the OCR engine now shows "update needed"** until the user taps Update in settings (about 55 MB).
 
 **Session 4 (2026-10-12, the work machine):** checked this file against the code; three statements were out of date and are fixed (§3.2 copy order, §3.5b capture order, §10 shared bars). Then built the **Whisper assistant** (§3.8):
 - on-device speech recognition with whisper.cpp and FUTO's base.en model
@@ -31,7 +31,7 @@ All built, tested and installed. The user has since tried the module and the mod
   - Smart screenshot, both the selection and the editor (§3.4); not re-checked since its selection moved to `:core:selection` (§10)
   - the activation screenshot and Retake (§3.5, §3.5b)
   - the OCR engine/model manager, with ORT telemetry disabled (§4)
-- **Next action:** the user tries Screen text's **word selection** (§3.2): Word and Block modes, word boxes in a native app, in Chrome and in **Firefox** (estimated boxes there), and Copy across several boxes. Then the user has tried the New reminder module and the modal on the keyboard. They still find the switch to typing not ideal but accepted it as is (§8, "Typing in the panel's modal"); don't reopen it unless they ask. Still to try: the wave taps (finish, start over) and the quick-time buttons. Also try **Upcoming reminders** (Settings → Whisper assistant): list, edit (including times and early reminders), delete, and New reminder. The user is raising their own ntfy server's `message-delay-limit` (§11); afterwards **Re-check limit** should show the new value. Transcripts are logged at info level under `PowerPP.Assistant` / `PowerPP.Whisper`.
+- **Next action:** the user updates the OCR engine (Settings → OCR engine and models → Update; it shows "update needed" since the move to ONNX Runtime 1.31) and runs OCR text once. Then the user tries Screen text's **word selection** (§3.2): Word and Block modes, word boxes in a native app, in Chrome and in **Firefox** (estimated boxes there), and Copy across several boxes. Then the user has tried the New reminder module and the modal on the keyboard. They still find the switch to typing not ideal but accepted it as is (§8, "Typing in the panel's modal"); don't reopen it unless they ask. Still to try: the wave taps (finish, start over) and the quick-time buttons. Also try **Upcoming reminders** (Settings → Whisper assistant): list, edit (including times and early reminders), delete, and New reminder. The user is raising their own ntfy server's `message-delay-limit` (§11); afterwards **Re-check limit** should show the new value. Transcripts are logged at info level under `PowerPP.Assistant` / `PowerPP.Whisper`.
 
   Still pending from session 3: Media extractor and Smart screenshot's Scan on real apps (the user mostly browses in **Firefox**; tune `MediaScan` from that, §3.7), and re-checking Smart screenshot and Screen text (§10). The open question for the user is in §7 (Small model).
 - **New checkout or machine:** `git submodule update --init` (whisper.cpp, §6). Both PCs have the NDK and CMake (§6).
@@ -469,9 +469,9 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - Downloads from earlier builds in `filesDir/ocr` are moved on first start.
   - XGesture has this problem: it keeps models in `filesDir` and its backup rules don't exclude them.
 - **`OcrCatalog`** pins every file with size and SHA-256 and lists URLs in order; any byte-identical mirror is acceptable. All values were verified 2026-10-08:
-  - **Engine:** ONNX Runtime **1.30.0** AAR from Maven Central, 53,040,218 B, SHA-256 `e7fb945e…73f1`.
-    - Its SHA-1 `656d9413…` equals Maven Central's published `.sha1`.
-    - Only `jni/<first supported ABI>/libonnxruntime.so` is extracted; then the AAR is deleted. arm64 lib: 32,990,480 B, SHA-256 `df5d25c7…`.
+  - **Engine:** ONNX Runtime **1.31.0** AAR from Maven Central, 55,138,854 B, SHA-256 `72683787…40a7` (verified 2026-10-24; 1.30.0 before that).
+    - Its SHA-1 `09e43472…` equals Maven Central's published `.sha1`.
+    - Only `jni/<first supported ABI>/libonnxruntime.so` is extracted; then the AAR is deleted. arm64 lib: 34,208,680 B, SHA-256 `8005a741…`.
   - **PP-OCRv6 Medium** (Apache-2.0, official `PaddlePaddle` org):
 
     | File | Hugging Face commit | Size | SHA-256 |
@@ -489,15 +489,15 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
   - tries each URL in order
   - accepts a file only when its size and SHA-256 match, deletes mismatched bytes, then renames it into place
 - **`OcrComponents`** (@Singleton, on `ComponentStore`):
-  - state per component: NotInstalled / Downloading (throttled to 0.1 %) / Verifying / Installed / Failed
+  - state per component: NotInstalled / Downloading (throttled to 0.1 %) / Verifying / Installed / Outdated / Failed
   - installing a model installs the engine first if it's missing
   - cancellation propagates (Remove during a download cancels it)
-  - **installed = a marker file written last**, after verification **and** a load check
+  - **installed = a marker file written last**, after verification **and** a load check. It records the version, and only the catalog's current version counts (`ComponentStore`, unit-tested). An earlier one is **Outdated**: the settings row says "update needed" and offers Update and Remove; Update deletes the old files first (otherwise the engine's "already unpacked" shortcut would keep the old library). Nothing updates by itself; downloads stay user-initiated. Why: the APK's JNI glue must match the engine (ORT 1.31's glue asks for API version 31, which a 1.30 engine refuses with "a mismatch between the ORT class files and the ORT native library"). `TextRecognizer.isInstalled` requires the engine **and** the model at their current versions.
 - **Load check (`OrtEngine`):**
   - **Engine:** `System.load(path)` (made read-only first, as Android 17 requires), then `OrtEnvironment.getEnvironment()`.
   - **Models:** detection input `[n,3,h,w]` → output `[n,1,h,w]`; recognition input `[n,3,48,w]` → output `[n,t,C]` with `C` = dictionary + 1 or + 2. The actual `C` is logged (tag `PowerPP.Ocr`). **Confirmed on-device: 18,710** = 18,708 characters + CTC blank + space (PaddleOCR `use_space_char`).
 - **How the downloaded engine loads** (verified in sources):
-  - On Android, ORT 1.30's `OnnxRuntime.init()` only `loadLibrary`s the JNI glue `libonnxruntime4j_jni.so`.
+  - On Android, ORT 1.30's and 1.31's `OnnxRuntime.init()` only `loadLibrary`s the JNI glue `libonnxruntime4j_jni.so` (1.31's new `extractProviderLibrary` calls return `false` at once on Android; checked in the AAR's bytecode).
   - `readelf`: the glue has `NEEDED libonnxruntime.so`; the engine's `SONAME` is `libonnxruntime.so`, and it depends only on libc, libm, libdl, liblog and libandroid.
   - bionic `find_library_internal` first reuses an already-loaded library by SONAME.
   - So: `System.load(engine)` → then any `ai.onnxruntime` use. The app excludes `**/libonnxruntime.so` from packaging; the APK ships only the glue (111 KB arm64).
@@ -506,11 +506,13 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **Pipeline parameters:** see §3.3. They come from PaddleX's OCR pipeline, not the models' `inference.yml`. `RecognitionDictionary` parses the dictionary; it's unit-tested against the quoting rules (PyYAML reads 18,708 plain or single-quoted entries).
 - **Other models:** the pipeline reads the class count and dictionary from the model files, so other PP-OCR (DBNet + CTC) models should work. Check their configs against §3.3 before adding them to `OcrCatalog`. Non-PP-OCR engines would need their own pipeline.
 - **Permissions:** `INTERNET` (declared by `:core:download` and `:core:ntfy`) is used **only** for user-initiated downloads and for posting to the user's ntfy server; `RECORD_AUDIO` (`:core:assistant`) only while the panel is open (§3.8). The final APK requests only those two (plus AndroidX's internal dynamic-receiver permission); `ACCESS_NETWORK_STATE`, added by the ORT AAR, is removed with `tools:node="remove"` in the app manifest.
-- **⚠️ ONNX Runtime telemetry: disabled three ways** (found on-device 2026-10-08 from `ORTTelemetry` log lines; verified in ORT v1.30.0 sources).
+- **⚠️ ONNX Runtime telemetry: disabled three ways** (found on-device 2026-10-08 from `ORTTelemetry` log lines; verified in ORT v1.30.0 sources, and again in v1.31.0 on 2026-10-24).
   - **What the AAR ships:** a `ContentProvider` `ai.onnxruntime.TelemetryInitializer` that auto-starts at every app launch and creates a 1DS Java `HttpClient`, plus connectivity and power receivers. In native code, `PosixTelemetry::enabled_` defaults to **true**.
   - **Correction:** an earlier statement to the user that ORT "makes no network calls" was unverified and wrong.
-  - **Layer 1:** `Os.setenv("ORT_DISABLE_TELEMETRY", "1")` before `System.load`. Read via `getenv` in `telemetry_environment.h`; this triggers the full, irreversible suppression in `PosixTelemetry::Initialize` (no uploader, no events, no device id).
-  - **Layer 2:** the provider is removed from the merged manifest, so the Java transport never exists and Android telemetry is "unavailable".
+  - **Layer 1:** `Os.setenv("ORT_DISABLE_TELEMETRY", "1")` before `System.load`. Read via `getenv` in `telemetry_environment.h` (`IsTelemetryDisabledByEnvironment`: 1/true/yes/on/y); this triggers the full, irreversible suppression (no uploader, no events, no device id).
+    - 1.30: in `PosixTelemetry::Initialize`.
+    - 1.31 replaced the POSIX code with a shared 1DS provider, `OneDsTelemetry` (`core/platform/telemetry_1ds.cc`). Its `Initialize` latches `telemetry_disabled_` and returns before any setup. Every send path needs `logger_`, which only the rest of `Initialize` creates. The base `Telemetry` it also forwards to is a no-op on Android and is gated by the latch as well.
+  - **Layer 2:** the provider is removed from the merged manifest, so the Java transport never exists and Android telemetry is "unavailable" (1.31: `Initialize` returns when `HttpClient_Android::GetClientInstance()` is null). The 1.31 AAR's manifest is unchanged: the same `TelemetryInitializer` provider name and the same `ACCESS_NETWORK_STATE`.
   - **Layer 3:** `OrtEnvironment.setTelemetry(false)`.
   - **Verified on-device:** after install, the restarted process logs no `ORTTelemetry`/onnxruntime lines, and the APK manifest (aapt2 dump) has no `TelemetryInitializer`.
   - **When bumping ORT, re-check** its telemetry code and manifest.
@@ -567,7 +569,7 @@ The settings list, the switch and the modal pick it up automatically.
 
 **Commands:**
 - `./gradlew :app:assembleDebug` builds the debug APK.
-- Unit tests: `./gradlew testDebugUnitTest` (96 tests, all pass, 2026-10-24).
+- Unit tests: `./gradlew testDebugUnitTest` (98 tests, all pass, 2026-10-24).
 - **First checkout:** `git submodule update --init` fetches whisper.cpp (`third_party/whisper.cpp`, pinned to v1.9.5). The first build compiles it for three ABIs (a few minutes); later builds reuse it.
 - Lint for everything: `./gradlew lintDebug`.
 - Install on the device: `./gradlew :app:installDebug` (needs `adb connect <ip:port>` first).
@@ -592,8 +594,12 @@ The settings list, the switch and the modal pick it up automatically.
     - Installed with `~/.android/bin/android-cli --no-metrics sdk install 'ndk/28.2.13676358' 'cmake/3.31.6'`.
   - The SDK licenses were accepted with the user's approval.
   - **⚠️ Google's Android CLI telemetry:** in cmdline-tools 23.0 (found at home, 2026-10-08), `sdkmanager` is a deprecated wrapper that downloads Google's "Android CLI" to `~/.android/bin/android-cli` and runs it **with usage metrics on** (uploaded to `play.google.com/log`). Verified in its bytecode (`AndroidCLI.initMetrics`): only the per-run `--no-metrics` flag disables them; `~/.android/analytics.settings` `hasOptedIn:false` is ignored. Gradle never uses it. **Never run `sdkmanager`;** run `~/.android/bin/android-cli --no-metrics sdk …` instead.
-- **Gradle:** the wrapper, pinned to **9.8.1** with `distributionSha256Sum`. It was generated from the official distribution, SHA-256 verified.
+- **Gradle:** the wrapper, pinned to **9.8.2** with `distributionSha256Sum` (`21bd5da2…9607`, Gradle's published checksum; the wrapper refuses a download that doesn't match). Updated with `./gradlew wrapper --gradle-version 9.8.2 --distribution-type bin --gradle-distribution-sha256-sum …`; the wrapper jar didn't change and matches Gradle's published `gradle-9.8.2-wrapper.jar.sha256`.
 - **Versions at scaffold time:** see `gradle/libs.versions.toml` (AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Compose BOM 2026.09.00).
+- **Bumped 2026-10-24** (lint's "newer version available" warnings), release notes checked:
+  - DataStore 1.2.1 → 1.3.0: bug fixes (a reader could miss a concurrent update; temp-file rename) and new optional APIs (`DataStore.Builder`, recommended over `DataStoreFactory` but not deprecated; Tink encryption). Nothing we use changed.
+  - kotlinx-serialization 1.11.0 → 1.12.0: every decoding exception is now wrapped in `JsonException`, which extends `SerializationException` (an `IllegalArgumentException`), checked in the jar. So `jsonDataStore`'s and `NtfyClient`'s catches still apply.
+  - ONNX Runtime 1.30.0 → 1.31.0: §4.
 - **IDE:** Android Studio is optional and up to the user. The project builds from the CLI with `./gradlew`.
 - **Device testing:** the Pixel over adb (`/usr/bin/adb` from `extra/android-tools`). Ask the user for device-side information only as a last resort.
   - Each PC needs pairing once (*Wireless debugging → Pair device with pairing code*, then `adb pair`). The home PC reaches the phone over Tailscale (`100.x` address).
@@ -718,7 +724,7 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 
 **Session 4 (2026-10-12):** the Whisper assistant, ntfy and Reminders (§3.8), with the shared `:core:download`, `jsonDataStore`, `ComponentRow` and `OverlayWindow`'s typing mode (now `setTyping`) dropping the backdrop. Built, 88 unit tests passing, lint at zero issues, installed on the phone. Read-only checks: the native libraries were extracted, all 7 ggml CPU variants are present, and the service process runs with no crashes. **Confirmed working by the user** (the assistant and a spoken reminder). Then Upcoming reminders, the priority row, the tappable wave and the New reminder module (`CommandModule`): built, 91 tests, lint clean, installed. The user has since tried the module; the wave taps haven't been tried yet. Then the modal on the keyboard in one switch, and the quick-time buttons. Also needs re-checking: the OCR downloads (moved onto `ComponentStore`), and OCR's and Screen text's edit card (the window now stays full until the keyboard is up, then ends at the keyboard).
 
-**Session 5 (2026-10-24):** Screen text's word selection (§3.2), the shared `OverlayChoiceBar` (Media extractor's view row now uses it) and words in `:core:textpick`. Built, 96 tests, installed; not yet tried by the user.
+**Session 5 (2026-10-24):** Screen text's word selection (§3.2), the shared `OverlayChoiceBar` (Media extractor's view row now uses it) and words in `:core:textpick`. Built, 96 tests, installed; not yet tried by the user. Then the version bumps (§6) and versioned installs (§4): built, 98 tests, lint at zero, installed. Read-only checks: the APK has no `TelemetryInitializer` and only the expected permissions; its arm64 JNI glue is the 1.31.0 AAR's after `llvm-strip` (same SHA-256, `VERS_1.31.0`); the service process restarts with no crash and no `ORTTelemetry` lines. **To do on the phone:** Settings → OCR engine → Update, then run OCR text once.
 
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
@@ -787,8 +793,8 @@ Re-verify only if the target platform changes.
 - `BundleCompat.getParcelableArray(bundle, key, class)` (androidx.core 1.19.1) uses the typed `Bundle` call on API 34+ and the old one below.
 - `ACTION_SET_SELECTION` on another app's `TextView` shows its selection UI only if that text is selectable or editable (`Editor.startActionModeInternal` → `checkField()`).
 
-**ONNX Runtime 1.30 Java:** on Android, `OnnxRuntime.init()` only `loadLibrary`s `onnxruntime4j_jni` (see §4).
-- API checked in the pinned AAR: `OnnxTensor.createTensor(env, FloatBuffer, long[])`, `OrtSession.run(Map)`, `SessionOptions.setIntraOpNumThreads`/`addXnnpack`/`addConfigEntry`.
+**ONNX Runtime 1.30 and 1.31 Java:** on Android, `OnnxRuntime.init()` only `loadLibrary`s `onnxruntime4j_jni` (see §4). The glue then calls `initialiseAPIBase(ORT_API_VERSION)` (31 in 1.31), so the downloaded engine must be the same version.
+- API checked in the pinned AAR (still compiles against 1.31): `OnnxTensor.createTensor(env, FloatBuffer, long[])`, `OrtSession.run(Map)`, `SessionOptions.setIntraOpNumThreads`/`addXnnpack`/`addConfigEntry`.
 - The engine includes the XNNPACK and NNAPI providers. XNNPACK crashes with PP-OCRv6 Medium (§3.3).
 
 **Android SDK tools:** `sdkmanager` (cmdline-tools 23.0) runs Google's Android CLI with metrics on (§6).

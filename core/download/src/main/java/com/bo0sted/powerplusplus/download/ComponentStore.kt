@@ -32,13 +32,21 @@ sealed interface ComponentState {
     data class Downloading(val bytes: Long, val total: Long) : ComponentState
     data object Verifying : ComponentState
     data class Installed(val bytesOnDisk: Long) : ComponentState
+
+    /**
+     * An earlier version ([installedVersion]) is on disk; it doesn't count as installed, since files
+     * from another version may not work with this build (e.g. an engine library and its Java glue).
+     * Installing replaces it.
+     */
+    data class Outdated(val installedVersion: String, val bytesOnDisk: Long) : ComponentState
     data class Failed(val reason: String) : ComponentState
 }
 
 /**
  * Downloads, verifies, stores and removes [components] under [root], one directory each. A
  * component counts as installed only after its files are verified **and** [finishInstall] passes;
- * a marker file written last records that. Downloads run in a process-wide scope (the accessibility service
+ * a marker file written last records that, with the version installed. Only the catalog's current
+ * version counts; an earlier one is [ComponentState.Outdated] until the user installs the new one. Downloads run in a process-wide scope (the accessibility service
  * keeps the process alive) and resume after interruption.
  *
  * [root] should be in `noBackupFilesDir`: Auto Backup includes filesDir, and with more than 25 MB it
@@ -57,7 +65,12 @@ abstract class ComponentStore<C : Downloadable>(
 
     fun directory(component: C) = File(root, component.id)
 
-    fun isInstalled(component: C) = File(directory(component), INSTALLED_MARKER).isFile
+    /** Installed at the catalog's current version. */
+    fun isInstalled(component: C) = installedVersion(component) == component.version
+
+    /** The version on disk, or `null` if none is fully installed. */
+    private fun installedVersion(component: C): String? =
+        File(directory(component), INSTALLED_MARKER).takeIf { it.isFile }?.readText()
 
     /** Downloads and installs [component], unless that's already under way. */
     fun install(component: C) {
@@ -97,7 +110,12 @@ abstract class ComponentStore<C : Downloadable>(
 
     private suspend fun installNow(component: C) {
         try {
-            val directory = directory(component).apply { mkdirs() }
+            val directory = directory(component)
+            // Another version's files (and any partial download for it) mustn't be mixed with this one's.
+            if (installedVersion(component).let { it != null && it != component.version }) {
+                withContext(Dispatchers.IO) { directory.deleteRecursively() }
+            }
+            directory.mkdirs()
             val total = component.downloadBytes
             var finishedBytes = 0L
             var shownPermille = -1L
@@ -128,8 +146,11 @@ abstract class ComponentStore<C : Downloadable>(
         }
     }
 
-    private fun initialState(component: C): ComponentState =
-        if (isInstalled(component)) ComponentState.Installed(directory(component).sizeOnDisk()) else ComponentState.NotInstalled
+    private fun initialState(component: C): ComponentState {
+        val installed = installedVersion(component) ?: return ComponentState.NotInstalled
+        val size = directory(component).sizeOnDisk()
+        return if (installed == component.version) ComponentState.Installed(size) else ComponentState.Outdated(installed, size)
+    }
 
     private fun set(component: C, state: ComponentState) = states.update { it + (component.id to state) }
 

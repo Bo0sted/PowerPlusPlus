@@ -10,14 +10,14 @@ import java.io.File
 /**
  * Loads the downloaded ONNX Runtime engine and checks models against it.
  *
- * How the downloaded engine is used (verified against ORT 1.30 and bionic, AGENTS.md §4): on
+ * How the downloaded engine is used (verified against ORT 1.30 and 1.31 and bionic, AGENTS.md §4): on
  * Android, `OnnxRuntime.init()` only `System.loadLibrary`s the bundled JNI glue, whose `DT_NEEDED`
  * is `libonnxruntime.so`. Loading the engine first with `System.load(path)` registers that SONAME,
  * and the linker reuses it when the glue loads. So [load] must run before any `ai.onnxruntime` class
  * is touched. A loaded engine can't be unloaded; removing it takes effect after a restart.
  *
  * Microsoft's AAR also ships 1DS telemetry, enabled by default in native code. It is shut off three
- * ways (verified in ORT 1.30 sources, AGENTS.md §4): `ORT_DISABLE_TELEMETRY=1` before the engine
+ * ways (verified in ORT 1.30 and 1.31 sources, AGENTS.md §4): `ORT_DISABLE_TELEMETRY=1` before the engine
  * loads (full, irreversible suppression: no uploader, events or device id), removal of the AAR's
  * `TelemetryInitializer` provider in the app manifest (so its Java HTTP transport never exists), and
  * `OrtEnvironment.setTelemetry(false)`.

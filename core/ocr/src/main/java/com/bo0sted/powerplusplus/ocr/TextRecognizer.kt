@@ -19,7 +19,9 @@ class TextRecognizer @Inject constructor(private val components: OcrComponents) 
     private val mutex = Mutex()
     private var ocr: PpOcr? = null
 
-    val isInstalled: Boolean get() = components.isInstalled(OcrCatalog.PP_OCR_V6_MEDIUM)
+    /** The engine and model are both installed, at the versions this build uses. */
+    val isInstalled: Boolean
+        get() = components.isInstalled(OcrCatalog.ENGINE) && components.isInstalled(OcrCatalog.PP_OCR_V6_MEDIUM)
 
     /** Loads the models ahead of [recognize], e.g. while the user is still choosing a region. */
     suspend fun preload() {

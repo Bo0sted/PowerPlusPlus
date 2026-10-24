@@ -6,7 +6,7 @@ import com.bo0sted.powerplusplus.download.RemoteFile
 /**
  * Everything OCR downloads, pinned to exact files from their official publishers. A file is
  * accepted only if its size and SHA-256 match, so a mirror can serve it as long as the bytes are
- * identical. Verified 2026-10-08; see AGENTS.md §4.
+ * identical. Verified 2026-10-08 (the engine 2026-10-24); see AGENTS.md §4.
  */
 object OcrCatalog {
 
@@ -14,14 +14,14 @@ object OcrCatalog {
     val ENGINE = OcrComponent(
         id = "engine-onnxruntime",
         kind = OcrComponent.Kind.Engine,
-        version = "1.30.0",
+        version = "1.31.0",
         files = listOf(
             RemoteFile(
                 name = "onnxruntime-android.aar",
-                sizeBytes = 53_040_218,
-                sha256 = "e7fb945e402205f6db858d65bb78d2bdb0812317b383976c9e3bceb4862c73f1",
+                sizeBytes = 55_138_854,
+                sha256 = "72683787a80d0608a3121b967d8e1239aef48286826661c953211626690540a7",
                 urls = listOf(
-                    "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.30.0/onnxruntime-android-1.30.0.aar",
+                    "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.31.0/onnxruntime-android-1.31.0.aar",
                 ),
             ),
         ),

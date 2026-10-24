@@ -7,7 +7,7 @@
     <string name="ocr_open_settings">Open settings</string>
     <string name="ocr_no_text">No text found in this area</string>
     <string name="ocr_failed">Text recognition failed</string>
-    <string name="ocr_not_installed">The OCR model isn\'t installed</string>
+    <string name="ocr_not_installed">The OCR engine or model needs a download or an update</string>
     <string name="ocr_capture_failed">Couldn\'t capture the screen</string>
     <string name="ocr_blocked">This app blocks screenshots</string>
 </resources>

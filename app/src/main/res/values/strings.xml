@@ -40,8 +40,10 @@
     <string name="component_status_verifying">Verifying…</string>
     <string name="component_status_installed">Installed · %1$s</string>
     <string name="component_status_failed">Failed: %1$s</string>
+    <string name="component_status_outdated">Version %1$s installed · update needed · %2$s</string>
     <string name="component_download">Download</string>
     <string name="component_retry">Retry</string>
+    <string name="component_update">Update</string>
     <string name="component_remove">Remove</string>
     <string name="component_remove_title">Remove %1$s?</string>
     <string name="component_remove_body">It can be downloaded again at any time.</string>

@@ -25,8 +25,8 @@ import com.bo0sted.powerplusplus.R
 import com.bo0sted.powerplusplus.download.ComponentState
 
 /**
- * One downloadable engine or model: where it comes from, its state, and Download / Cancel / Retry /
- * Remove. Removing asks first.
+ * One downloadable engine or model: where it comes from, its state, and Download / Update / Cancel /
+ * Retry / Remove. Removing asks first.
  */
 @Composable
 internal fun ComponentRow(
@@ -53,12 +53,16 @@ internal fun ComponentRow(
             )
             ComponentState.Verifying -> stringResource(R.string.component_status_verifying)
             is ComponentState.Installed -> stringResource(R.string.component_status_installed, size(state.bytesOnDisk))
+            is ComponentState.Outdated -> stringResource(R.string.component_status_outdated, state.installedVersion, size(downloadBytes))
             is ComponentState.Failed -> stringResource(R.string.component_status_failed, state.reason)
         }
         Text(
             status,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (state is ComponentState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            color = when (state) {
+                is ComponentState.Failed, is ComponentState.Outdated -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            },
         )
         when (state) {
             is ComponentState.Downloading -> LinearProgressIndicator(
@@ -75,6 +79,10 @@ internal fun ComponentRow(
                 is ComponentState.Downloading -> TextButton(onClick = onRemove) { Text(stringResource(R.string.action_cancel)) }
                 ComponentState.Verifying -> Unit
                 is ComponentState.Installed -> TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.component_remove)) }
+                is ComponentState.Outdated -> {
+                    TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.component_remove)) }
+                    FilledTonalButton(onClick = onInstall) { Text(stringResource(R.string.component_update)) }
+                }
             }
         }
     }
