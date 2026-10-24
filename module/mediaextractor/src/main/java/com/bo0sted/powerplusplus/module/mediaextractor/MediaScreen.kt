@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +32,7 @@ import com.bo0sted.powerplusplus.ui.MessageBar
 import com.bo0sted.powerplusplus.ui.OverlayBar
 import com.bo0sted.powerplusplus.ui.OverlayBarText
 import com.bo0sted.powerplusplus.ui.OverlayBottomBars
+import com.bo0sted.powerplusplus.ui.OverlayChoiceBar
 import com.bo0sted.powerplusplus.ui.OverlayCloseButton
 import com.bo0sted.powerplusplus.ui.pickedColor
 import kotlin.math.roundToInt
@@ -125,18 +123,7 @@ internal fun MediaScreen(
                 }
                 OverlayCloseButton(onClose)
             }
-            OverlayBar {
-                SingleChoiceSegmentedButtonRow {
-                    MediaView.entries.forEachIndexed { index, entry ->
-                        SegmentedButton(
-                            selected = entry == view,
-                            onClick = { onView(entry) },
-                            enabled = !busy,
-                            shape = SegmentedButtonDefaults.itemShape(index, MediaView.entries.size),
-                        ) { Text(stringResource(entry.label)) }
-                    }
-                }
-            }
+            OverlayChoiceBar(MediaView.entries, view, { stringResource(it.label) }, onView, enabled = !busy)
             if (view == MediaView.Scan && onRetake != null) {
                 OverlayBar {
                     TextButton(onClick = onRetake, enabled = !retaking && !busy) { Text(stringResource(R.string.media_retake)) }

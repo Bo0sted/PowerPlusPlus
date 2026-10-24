@@ -1,5 +1,8 @@
 <resources>
     <string name="textpick_hint">Tap text to select it</string>
+    <string name="textpick_hint_words">Tap a word to select it</string>
+    <string name="textpick_mode_words">Word</string>
+    <string name="textpick_mode_blocks">Block</string>
     <plurals name="textpick_selected">
         <item quantity="one">%d selected</item>
         <item quantity="other">%d selected</item>

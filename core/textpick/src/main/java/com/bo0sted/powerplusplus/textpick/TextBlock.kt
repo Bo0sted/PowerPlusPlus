@@ -2,8 +2,13 @@ package com.bo0sted.powerplusplus.textpick
 
 import androidx.compose.ui.unit.IntRect
 
-/** A piece of on-screen text and where it is, in screen pixels. */
-data class TextBlock(val text: String, val bounds: IntRect)
+/**
+ * A piece of on-screen text and where it is, in screen pixels.
+ *
+ * @property words its words, each a block of its own, for word selection ([wordRanges]); `null`
+ *   where the source can't place words (OCR), which then offers block selection only.
+ */
+data class TextBlock(val text: String, val bounds: IntRect, val words: List<TextBlock>? = null)
 
 /**
  * Cleans up raw blocks for display: drops empty or blank ones, drops any block whose bounds strictly

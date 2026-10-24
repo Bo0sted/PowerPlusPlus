@@ -1,5 +1,6 @@
 package com.bo0sted.powerplusplus.textpick
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -68,22 +69,66 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import com.bo0sted.powerplusplus.ui.OverlayChoiceBar
 import com.bo0sted.powerplusplus.ui.editedColor
 import com.bo0sted.powerplusplus.ui.pickedColor
 import kotlin.math.roundToInt
 
+/** How a [TextPickScreen] picks text: whole blocks, or single words (separated by spaces). */
+enum class PickMode(@get:StringRes val label: Int) {
+    Words(R.string.textpick_mode_words),
+    Blocks(R.string.textpick_mode_blocks),
+}
+
 /**
  * What a [TextPickScreen] has picked and which pick is being edited. The window's owner keeps it,
  * so Back can leave editing ([cancelEdit]) instead of closing.
+ *
+ * Word selection is offered, and is the default, when the blocks come with [TextBlock.words]. Each
+ * mode keeps its own picks, so switching back and forth loses nothing; Copy uses the current mode's.
  */
 @Stable
 class TextPickState(val blocks: List<TextBlock>) {
-    var picks by mutableStateOf(PickList())
-        internal set
+    /** Every block's words, in reading order. */
+    private val words: List<TextBlock> = blocks.flatMap { it.words.orEmpty() }
 
-    /** The index of the block being edited, or `null`. */
+    /** The index in [blocks] of each of [words]. */
+    private val blockOfWord: IntArray = blocks.flatMapIndexed { index, block -> List(block.words.orEmpty().size) { index } }.toIntArray()
+
+    val modes: List<PickMode> = if (blocks.any { it.words != null }) PickMode.entries else listOf(PickMode.Blocks)
+
+    var mode by mutableStateOf(modes.first())
+        private set
+
+    private var wordPicks by mutableStateOf(PickList())
+    private var blockPicks by mutableStateOf(PickList())
+
+    /** The current mode's picks; indices are into [targets]. */
+    var picks: PickList
+        get() = if (mode == PickMode.Words) wordPicks else blockPicks
+        internal set(value) {
+            if (mode == PickMode.Words) wordPicks = value else blockPicks = value
+        }
+
+    /** What can be picked in the current mode: the words or the blocks. */
+    val targets: List<TextBlock>
+        get() = if (mode == PickMode.Words) words else blocks
+
+    /** The index of the target being edited, or `null`. */
     var editing by mutableStateOf<Int?>(null)
         private set
+
+    internal fun selectMode(next: PickMode) {
+        if (next in modes) mode = next
+    }
+
+    /**
+     * What Copy puts on the clipboard, edits included. Blocks: one per line, in pick order. Words:
+     * one line per block, in the order its first word was picked, with that block's picked words in
+     * text order, separated by spaces.
+     */
+    internal fun copiedText(): String =
+        if (mode == PickMode.Words) picks.joinedLines(words) { blockOfWord[it] } else picks.joinedText(blocks)
 
     internal fun startEdit(index: Int) {
         editing = index
@@ -95,16 +140,18 @@ class TextPickState(val blocks: List<TextBlock>) {
 
     internal fun finishEdit(text: String) {
         val index = editing ?: return
-        picks = picks.edited(index, text, blocks[index].text)
+        picks = picks.edited(index, text, targets[index].text)
         editing = null
     }
 }
 
 /**
- * Full-screen picker over the state's blocks: each block gets a box. Tapping a box adds its text to
- * the list (in tap order) or removes it; tapping elsewhere closes unless [closeOnTapOutside] is off.
- * The bottom toolbar opens the list, which can be scrolled and whose entries can be edited or
- * removed. Picked boxes are green, edited ones red. Copy copies the list, edits included, one per line.
+ * Full-screen picker over the state's targets (its words or blocks, [TextPickState.mode]): each gets
+ * a box. Tapping a box adds its text to the list (in tap order) or removes it; tapping elsewhere
+ * closes unless [closeOnTapOutside] is off. The bottom toolbar opens the list, which can be scrolled
+ * and whose entries can be edited or removed. Picked boxes are green, edited ones red. Copy copies
+ * the picks, edits included ([TextPickState.copiedText]). When both modes are offered, a Word · Block
+ * row under the toolbar switches between them.
  *
  * Editing shows only a card at the top with a text field: the owner fits the window above the
  * keyboard ([onEditingChange]), which the system draws below overlays.
@@ -136,7 +183,7 @@ fun TextPickScreen(
         return
     }
 
-    val blocks = state.blocks
+    val targets = state.targets
     val picks = state.picks
     // Block bounds are in screen pixels; this is where the window sits on screen.
     var origin by remember { mutableStateOf(IntOffset.Zero) }
@@ -171,11 +218,11 @@ fun TextPickScreen(
                         viewport = viewport.transformed(centroid, zoomChange, pan, size.toSize())
                     }
                 }
-                .pointerInput(blocks, closeOnTapOutside) {
+                .pointerInput(targets, closeOnTapOutside) {
                     detectTapGestures { tap ->
                         val point = viewport.toContent(tap)
                         val slop = (slopPx / viewport.zoom).roundToInt()
-                        val hit = hitTest(blocks, point.x.roundToInt() + origin.x, point.y.roundToInt() + origin.y, slop)
+                        val hit = hitTest(targets, point.x.roundToInt() + origin.x, point.y.roundToInt() + origin.y, slop)
                         if (hit != null) state.picks = state.picks.toggled(hit) else if (closeOnTapOutside) onClose()
                     }
                 },
@@ -198,7 +245,7 @@ fun TextPickScreen(
                     drawImage(background, dstOffset = IntOffset(-origin.x, -origin.y), dstSize = IntSize(background.width, background.height))
                     drawRect(scrim)
                 }
-                blocks.forEachIndexed { index, block ->
+                targets.forEachIndexed { index, block ->
                     val topLeft = Offset((block.bounds.left - origin.x).toFloat(), (block.bounds.top - origin.y).toFloat())
                     val size = Size(block.bounds.width.toFloat(), block.bounds.height.toFloat())
                     val radius = CornerRadius(corner)
@@ -242,7 +289,7 @@ fun TextPickScreen(
                 ) {
                     if (picks.size == 0) {
                         Text(
-                            text = stringResource(R.string.textpick_hint),
+                            text = stringResource(if (state.mode == PickMode.Words) R.string.textpick_hint_words else R.string.textpick_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 8.dp),
@@ -256,18 +303,21 @@ fun TextPickScreen(
                             )
                         }
                     }
-                    val allPicked = picks.size == blocks.size
-                    FilledTonalButton(onClick = { state.picks = if (allPicked) PickList() else picks.withAll(blocks.size) }) {
+                    val allPicked = picks.size == targets.size
+                    FilledTonalButton(onClick = { state.picks = if (allPicked) PickList() else picks.withAll(targets.size) }) {
                         Text(stringResource(if (allPicked) R.string.textpick_deselect_all else R.string.textpick_select_all))
                     }
                     Button(
                         enabled = picks.size > 0,
-                        onClick = { onCopy(picks.joinedText(blocks)) },
+                        onClick = { onCopy(state.copiedText()) },
                     ) { Text(stringResource(R.string.textpick_copy)) }
                     IconButton(onClick = onClose) {
                         Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.textpick_close))
                     }
                 }
+            }
+            if (state.modes.size > 1) {
+                OverlayChoiceBar(state.modes, state.mode, { stringResource(it.label) }, state::selectMode)
             }
         }
     }
@@ -303,7 +353,7 @@ private fun PickListPanel(state: TextPickState, modifier: Modifier) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = state.picks.textOf(pick, state.blocks),
+                        text = state.picks.textOf(pick, state.targets),
                         style = pickTextStyle(),
                         color = if (pick.edited != null) editedColor() else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f).padding(vertical = 8.dp),
@@ -323,7 +373,7 @@ private fun PickListPanel(state: TextPickState, modifier: Modifier) {
 /** The editor for one pick, alone at the top of the (shrunk) window, above the keyboard. */
 @Composable
 private fun EditCard(state: TextPickState, index: Int) {
-    val original = state.blocks[index].text
+    val original = state.targets[index].text
     val current = state.picks.picks.firstOrNull { it.index == index }?.edited ?: original
     var value by remember(index) { mutableStateOf(TextFieldValue(current, selection = TextRange(current.length))) }
     val focus = remember { FocusRequester() }

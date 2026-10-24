@@ -31,4 +31,14 @@ data class PickList(val picks: List<Pick> = emptyList()) {
 
     /** Every pick's text, in pick order, one per line. */
     fun joinedText(blocks: List<TextBlock>): String = picks.joinToString("\n") { textOf(it, blocks) }
+
+    /**
+     * The picks as lines, where [lineOf] says which line each index belongs to (for words, the block
+     * it's from). Lines come in the order they were first picked; within a line, picks are in index
+     * order (the text's own order) and joined by spaces.
+     */
+    fun joinedLines(blocks: List<TextBlock>, lineOf: (Int) -> Int): String =
+        picks.groupBy { lineOf(it.index) }.values.joinToString("\n") { line ->
+            line.sortedBy { it.index }.joinToString(" ") { textOf(it, blocks) }
+        }
 }

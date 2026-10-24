@@ -9,4 +9,5 @@ android {
 dependencies {
     implementation(project(":core:capture"))
     implementation(project(":core:textpick"))
+    implementation(libs.androidx.core.ktx)
 }

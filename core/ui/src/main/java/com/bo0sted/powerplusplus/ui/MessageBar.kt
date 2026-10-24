@@ -19,6 +19,9 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,6 +89,32 @@ fun RowScope.OverlayBarText(text: String) {
 @Composable
 fun OverlayCloseButton(onClose: () -> Unit) {
     IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.ui_close)) }
+}
+
+/**
+ * An [OverlayBar] of mutually exclusive [choices] as segmented buttons, e.g. an overlay's views or
+ * selection modes. [label] names each choice.
+ */
+@Composable
+fun <T> OverlayChoiceBar(
+    choices: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    enabled: Boolean = true,
+) {
+    OverlayBar {
+        SingleChoiceSegmentedButtonRow {
+            choices.forEachIndexed { index, choice ->
+                SegmentedButton(
+                    selected = choice == selected,
+                    onClick = { onSelect(choice) },
+                    enabled = enabled,
+                    shape = SegmentedButtonDefaults.itemShape(index, choices.size),
+                ) { Text(label(choice)) }
+            }
+        }
+    }
 }
 
 /** A short message in an [OverlayBar], with an optional Close button. */

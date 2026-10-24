@@ -36,4 +36,16 @@ class PickListTest {
         val list = PickList().toggled(1).edited(1, "x", original = "Beta").toggled(1).toggled(1)
         assertEquals("Beta", list.joinedText(blocks))
     }
+
+    @Test
+    fun wordsJoinIntoOneLinePerBlockInFirstPickOrder() {
+        // Two boxes: "green apples are yummy 555-123-4567" and "red apples are also yummy".
+        val words = listOf("green", "apples", "are", "yummy", "555-123-4567", "red", "apples", "are", "also", "yummy")
+            .map { TextBlock(it, IntRect(0, 0, 10, 10)) }
+        val blockOf = { index: Int -> if (index < 5) 0 else 1 }
+        val picks = PickList().toggled(4).toggled(9).toggled(0)
+        assertEquals("green 555-123-4567\nyummy", picks.joinedLines(words, blockOf))
+        assertEquals("yummy\ngreen 555-123-4567", PickList().toggled(9).toggled(4).toggled(0).joinedLines(words, blockOf))
+        assertEquals("green 555-000-0000", picks.toggled(9).edited(4, "555-000-0000", "555-123-4567").joinedLines(words, blockOf))
+    }
 }
