@@ -91,9 +91,11 @@ private fun PanelPageGrid(
     onToggle: (ToggleModule, Boolean) -> Unit,
 ) {
     val byCell = page.slots.filter { it.enabled }.associateBy { it.cell }
+    // At the bottom, within thumb reach, just above the voice wave; the gap below leaves room for
+    // the page dots when pages swipe sideways.
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.Bottom,
     ) {
         repeat(config.rows) { row ->
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
