@@ -4,8 +4,12 @@ import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
+import android.view.KeyEvent
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bo0sted.powerplusplus.assistant.Assistant
@@ -13,11 +17,15 @@ import com.bo0sted.powerplusplus.assistant.AssistantOverlay
 import com.bo0sted.powerplusplus.assistant.AssistantSession
 import com.bo0sted.powerplusplus.assistant.CommandModule
 import com.bo0sted.powerplusplus.data.Backdrop
+import com.bo0sted.powerplusplus.data.KeyShortcuts
 import com.bo0sted.powerplusplus.data.PanelConfig
 import com.bo0sted.powerplusplus.data.PanelRepository
+import com.bo0sted.powerplusplus.module.ActionModule
 import com.bo0sted.powerplusplus.module.ModuleHost
 import com.bo0sted.powerplusplus.module.ModuleRegistry
+import com.bo0sted.powerplusplus.module.PanelModule
 import com.bo0sted.powerplusplus.module.ToggleModule
+import com.bo0sted.powerplusplus.overlay.KeyEvents
 import com.bo0sted.powerplusplus.overlay.OverlayBackdrop
 import com.bo0sted.powerplusplus.overlay.OverlayWindow
 import com.bo0sted.powerplusplus.service.ModuleHostProvider
@@ -26,6 +34,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -54,6 +63,14 @@ class PanelController @Inject constructor(
 
     /** True while the activation screenshot is being taken and the panel isn't added yet. */
     private var capturing = false
+
+    /** Volume key shortcuts while the panel is open; see [onKeyEvent]. */
+    private var presses: PressDetector? = null
+    private val pressHandler = Handler(Looper.getMainLooper())
+    private val pressTimeout = Runnable { presses?.expire(SystemClock.uptimeMillis())?.let(::perform) }
+
+    /** Volume keys whose press was consumed, so their release is consumed too. */
+    private val consumedKeys = HashSet<Int>()
 
     enum class ShowResult { Shown, SystemPowerMenu, ServiceUnavailable }
 
@@ -109,10 +126,11 @@ class PanelController @Inject constructor(
         return ShowResult.Shown
     }
 
-    private fun panelUsesActivationScreenshot(): Boolean =
-        config.value.pages.any { page ->
-            page.slots.any { it.enabled && registry[it.typeId]?.usesActivationScreenshot == true }
-        }
+    private fun panelUsesActivationScreenshot(): Boolean {
+        val panel = config.value
+        val typeIds = panel.pages.flatMap { page -> page.slots.filter { it.enabled }.map { it.typeId } } + panel.volumeShortcuts.typeIds
+        return typeIds.any { registry[it]?.usesActivationScreenshot == true }
+    }
 
     private fun addPanel(host: ModuleHost) {
         capturing = false
@@ -146,21 +164,68 @@ class PanelController @Inject constructor(
                         config = current,
                         registry = registry,
                         host = host,
-                        onAction = { module ->
-                            if (module is CommandModule) {
-                                // Its modal opens here, over the panel, like a spoken command's.
-                                assistantSession.open(module.newDraft())
-                            } else {
-                                dismiss(keepScreenshot = module.usesActivationScreenshot)
-                                host.scope.launch { module.run(host) }
-                            }
-                        },
+                        onAction = { module -> activate(module, host, assistantSession) },
                         onToggle = { module: ToggleModule, on -> host.scope.launch { module.setOn(host, on) } },
                         onDismiss = ::dismiss,
                     )
                 }
             }
         }
+
+        val shortcuts = config.value.volumeShortcuts
+        if (!shortcuts.isEmpty) {
+            presses = PressDetector(shortcuts.doublePressWindowMs.toLong())
+            (host.service as? KeyEvents)?.setKeyEventFilter(::onKeyEvent)
+        }
+    }
+
+    /** A module tapped on the panel, or run by a volume key. */
+    private fun activate(module: PanelModule, host: ModuleHost, assistantSession: AssistantSession) {
+        when (module) {
+            // Its modal opens here, over the panel, like a spoken command's.
+            is CommandModule -> assistantSession.open(module.newDraft())
+            is ActionModule -> {
+                dismiss(keepScreenshot = module.usesActivationScreenshot)
+                host.scope.launch { module.run(host) }
+            }
+            is ToggleModule -> host.scope.launch { module.setOn(host, !module.isOn(host).first()) }
+        }
+    }
+
+    /**
+     * Volume keys while the panel is open: a key with a shortcut runs it (on the press, not the
+     * release, and once however long it's held) and doesn't change the volume. A key without one,
+     * and every key while a command modal is open, works as usual.
+     */
+    private fun onKeyEvent(event: KeyEvent): Boolean {
+        val key = when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> PressDetector.Key.Up
+            KeyEvent.KEYCODE_VOLUME_DOWN -> PressDetector.Key.Down
+            else -> return false
+        }
+        if (event.action == KeyEvent.ACTION_UP) return consumedKeys.remove(event.keyCode)
+        if (event.action != KeyEvent.ACTION_DOWN) return false
+        if (event.repeatCount > 0) return event.keyCode in consumedKeys
+        val detector = presses ?: return false
+        val shortcuts = shortcutsFor(key)
+        if (shortcuts.isEmpty || session?.modal?.draft != null) return false
+
+        consumedKeys += event.keyCode
+        pressHandler.removeCallbacks(pressTimeout)
+        detector.down(key, event.eventTime, hasDoublePress = shortcuts.doublePress != null).forEach(::perform)
+        detector.deadline?.let { pressHandler.postAtTime(pressTimeout, it) }
+        return true
+    }
+
+    private fun shortcutsFor(key: PressDetector.Key): KeyShortcuts =
+        config.value.volumeShortcuts.let { if (key == PressDetector.Key.Up) it.up else it.down }
+
+    private fun perform(press: PressDetector.Press) {
+        val host = hostProvider.host.value ?: return
+        val assistantSession = session ?: return
+        val shortcuts = shortcutsFor(press.key)
+        val typeId = (if (press.double) shortcuts.doublePress else shortcuts.press) ?: return
+        registry[typeId]?.let { activate(it, host, assistantSession) }
     }
 
     /** Started while the panel is still visible, which is what allows the activity start. */
@@ -177,6 +242,10 @@ class PanelController @Inject constructor(
      */
     fun dismiss(keepScreenshot: Boolean = false) {
         capturing = false
+        pressHandler.removeCallbacks(pressTimeout)
+        presses = null
+        consumedKeys.clear()
+        (hostProvider.host.value?.service as? KeyEvents)?.setKeyEventFilter(null)
         session?.close()
         session = null
         window?.dismiss()

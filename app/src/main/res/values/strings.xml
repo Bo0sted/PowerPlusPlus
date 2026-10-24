@@ -49,6 +49,15 @@
     <string name="component_remove_body">It can be downloaded again at any time.</string>
 
     <string name="appearance_title">Appearance</string>
+    <string name="volume_title">Volume key shortcuts</string>
+    <string name="volume_body">While the panel is open, a volume key can run a module, as if you tapped it. A key without a shortcut changes the volume as usual, as do both keys while a command is open.</string>
+    <string name="volume_up">Volume up</string>
+    <string name="volume_down">Volume down</string>
+    <string name="volume_press">Press</string>
+    <string name="volume_double_press">Double press</string>
+    <string name="volume_none">None</string>
+    <string name="volume_window">Double-press window · %1$d ms</string>
+    <string name="volume_window_hint">How long to wait for a second press. A key with a double press runs its single press only after this, so keep it short.</string>
     <string name="appearance_columns">Columns</string>
     <string name="appearance_rows">Rows</string>
     <string name="appearance_swipe">Switch pages by swiping</string>

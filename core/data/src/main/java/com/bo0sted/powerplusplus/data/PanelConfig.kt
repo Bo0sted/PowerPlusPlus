@@ -11,6 +11,7 @@ data class PanelConfig(
     val swipeAxis: SwipeAxis = SwipeAxis.Vertical,
     val backdrop: Backdrop = Backdrop.Blur,
     val pages: List<PanelPage> = listOf(PanelPage()),
+    val volumeShortcuts: VolumeShortcuts = VolumeShortcuts(),
 ) {
     val cellsPerPage: Int get() = columns * rows
 
@@ -22,6 +23,34 @@ data class PanelConfig(
 
 @Serializable
 enum class SwipeAxis { Vertical, Horizontal }
+
+/**
+ * Modules the volume keys run while the panel is open, as if tapped. A key with nothing assigned
+ * changes the volume as usual. Once a key has a double press, its single press waits
+ * [doublePressWindowMs] for a second press before it runs.
+ */
+@Serializable
+data class VolumeShortcuts(
+    val up: KeyShortcuts = KeyShortcuts(),
+    val down: KeyShortcuts = KeyShortcuts(),
+    val doublePressWindowMs: Int = DEFAULT_WINDOW_MS,
+) {
+    val isEmpty: Boolean get() = up.isEmpty && down.isEmpty
+
+    /** Every module type assigned to a key. */
+    val typeIds: List<String> get() = listOfNotNull(up.press, up.doublePress, down.press, down.doublePress)
+
+    companion object {
+        const val DEFAULT_WINDOW_MS = 300
+        val WINDOW_RANGE_MS = 100..1000
+    }
+}
+
+/** One volume key's modules, by type id; `null` for nothing. */
+@Serializable
+data class KeyShortcuts(val press: String? = null, val doublePress: String? = null) {
+    val isEmpty: Boolean get() = press == null && doublePress == null
+}
 
 /** What sits behind the panel. [Blur] falls back to [Dim] whenever the device can't blur. */
 @Serializable
