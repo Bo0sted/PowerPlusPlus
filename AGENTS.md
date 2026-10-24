@@ -4,6 +4,8 @@ This is the single source of truth for Power++. An engineer or LLM reading only 
 
 ## 0. Resume here
 
+**Session 5 (2026-10-24, the home machine):** checked this file against the code again: every module and command id, constant, file name, pinned hash and URL, version, symbol and the 91-test count match. Only status lines were out of date, now fixed: session 4's commits are on `origin/main` (§10), and the New reminder module and the modal on the keyboard have been tried by the user (§3.8, §11). No code changes.
+
 **Session 4 (2026-10-12, the work machine):** checked this file against the code; three statements were out of date and are fixed (§3.2 copy order, §3.5b capture order, §10 shared bars). Then built the **Whisper assistant** (§3.8):
 - on-device speech recognition with whisper.cpp and FUTO's base.en model
 - a voice wave at the bottom of the panel
@@ -17,7 +19,7 @@ The user confirmed it works on the phone. Then, in order:
 - a **tappable wave without the logo**
 - a **New reminder** panel module that opens the modal over the panel
 
-All built, tested and installed. The user hasn't yet tried the module or the wave taps. Not pushed.
+All built, tested and installed. The user has since tried the module and the modal on the keyboard (see Next action); the wave taps are still untried. On `origin/main` (§10).
 
 **Session 3 (2026-10-09, the user's home machine):** reviewed every pushed commit against this file; they matched apart from one error (§3.5b, fixed). Every user-facing message now shows inside Power++'s own windows instead of as a toast (§3.2, §3.4). Then built the **Media extractor** module and a **Scan** button in Smart screenshot (§3.7). Pushed by the user on 2026-10-10 (§10).
 
@@ -336,7 +338,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 
 ### 3.8 Whisper assistant and voice commands (user, 2026-10-12)
 
-**Implemented**, not a module: the assistant is built into the panel. Built, unit-tested, lint clean, installed; **not yet tried by the user on-device.**
+**Implemented**, not a module: the assistant is built into the panel. Built, unit-tested, lint clean, installed. **Confirmed by the user on-device** (the assistant and a spoken reminder, 2026-10-12), as were the New reminder module and the modal on the keyboard. Not yet tried: the wave taps, the quick-time buttons and Upcoming reminders (§0).
 
 **What the user asked for:**
 - Opening the panel starts listening. The modules stay usable.
@@ -443,7 +445,7 @@ Power++ makes the power button more powerful. **Pressing and holding power** ope
 - **New reminder** opens an empty draft at the current date and time (the user's choice, since nothing was spoken). It needs moving forward before Confirm enables.
 - **New reminder module** (user, 2026-10-12): `:module:newreminder` (typeId `new_reminder`, "New reminder"), an ordinary panel module.
   - It's a `CommandModule`: tapping it opens `ReminderCommand.newDraft()`, the same draft that Upcoming reminders' New reminder button opens, **in the panel's own modal**. The panel stays open, and the app isn't opened (the user rejected that first version, which started `RemindersActivity`).
-  - Back, Cancel and Confirm return to the panel, as for a spoken command. **Not yet tried on-device.**
+  - Back, Cancel and Confirm return to the panel, as for a spoken command. Tried by the user on-device (2026-10-12).
 - The modal is a Compose `Dialog` there: activities allow dialogs, and the keyboard resizes the window normally. Back steps back within the draft, then closes the modal; taps outside are ignored.
 - **Shared with the panel:** `CommandModalState` (draft, confirming, error; `open`/`cancel`/`confirm(scope)`/`onBack`) and the `CommandModal` card live in `:core:assistant`. The panel wraps the card with focus tracking for typing (`setTyping`).
 
@@ -707,12 +709,12 @@ Paths are relative to `~/github-clones/XGesture/app/src/main/java/com/slideindex
 
 **Session 3 (2026-10-09):** in-window messages replace every toast (Smart screenshot, its editor, Screen text, the "Copied" confirmation on API ≤ 32); the unused first-design OCR strings (`ocr_hint_cursor`, `ocr_hint_drag`, `ocr_reset`) were removed. Built, unit-tested, lint clean and installed on the phone; **not yet checked by the user on-device.** Then Media extractor and Smart screenshot's Scan (§3.7), with the shared `:core:media`, `OverlayBar` family and `forEachScreenNode`. Screen text now reads nodes through `forEachScreenNode`, and OCR text's selection screen uses the `OverlayBar` family (no behaviour change intended). `TextPickScreen`'s toolbar and Smart screenshot's floating toolbars still draw their own pills. Same status: built, tested, lint clean, installed, not yet checked by the user.
 
-**Session 4 (2026-10-12):** the Whisper assistant, ntfy and Reminders (§3.8), with the shared `:core:download`, `jsonDataStore`, `ComponentRow` and `OverlayWindow`'s typing mode (now `setTyping`) dropping the backdrop. Built, 88 unit tests passing, lint at zero issues, installed on the phone. Read-only checks: the native libraries were extracted, all 7 ggml CPU variants are present, and the service process runs with no crashes. **Confirmed working by the user** (the assistant and a spoken reminder). Then Upcoming reminders, the priority row, the tappable wave and the New reminder module (`CommandModule`): built, 91 tests, lint clean, installed. The module and the wave taps haven't been tried yet. Then the modal on the keyboard in one switch, and the quick-time buttons. Also needs re-checking: the OCR downloads (moved onto `ComponentStore`), and OCR's and Screen text's edit card (the window now stays full until the keyboard is up, then ends at the keyboard).
+**Session 4 (2026-10-12):** the Whisper assistant, ntfy and Reminders (§3.8), with the shared `:core:download`, `jsonDataStore`, `ComponentRow` and `OverlayWindow`'s typing mode (now `setTyping`) dropping the backdrop. Built, 88 unit tests passing, lint at zero issues, installed on the phone. Read-only checks: the native libraries were extracted, all 7 ggml CPU variants are present, and the service process runs with no crashes. **Confirmed working by the user** (the assistant and a spoken reminder). Then Upcoming reminders, the priority row, the tappable wave and the New reminder module (`CommandModule`): built, 91 tests, lint clean, installed. The user has since tried the module; the wave taps haven't been tried yet. Then the modal on the keyboard in one switch, and the quick-time buttons. Also needs re-checking: the OCR downloads (moved onto `ComponentStore`), and OCR's and Screen text's edit card (the window now stays full until the keyboard is up, then ends at the keyboard).
 
 **Not verified on-device since the 2026-10-09 refactor:** Smart screenshot after moving its selection to `:core:selection` and Retake to `:core:capture` (the behaviour should be unchanged). Screen text's new list and editing.
 
 **Remote:** `origin` = `git@github.com:Bo0sted/PowerPlusPlus.git` (SSH, private repo `github.com/Bo0sted/PowerPlusPlus`). `main` tracks `origin/main`; first pushed 2026-10-08.
-- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09. Session 3's commits (`dafe3fc` to `44c90f9`) were pushed by the user on 2026-10-10.
+- Session 2's commits (`ecbd612` onward) were pushed by the user on 2026-10-09. Session 3's commits (`dafe3fc` to `44c90f9`) were pushed by the user on 2026-10-10. Session 4's commits (`1b45270` to `26522bd`) are on `origin/main` too (seen from the home machine on 2026-10-24; the push date wasn't recorded).
 - The user's SSH key (`~/.ssh/github`) has a passphrase, so the agent can't push from its own shell (batch mode). Run `git push` in the user's terminal panel, where the user enters the passphrase themselves. Push only when the user says so.
 
 ## 11. Verified platform facts (checked against AOSP `main` and the pinned library sources, 2026-10-08)
@@ -762,7 +764,7 @@ Re-verify only if the target platform changes.
   - The keyboard's `AccessibilityWindowInfo` (`TYPE_INPUT_METHOD`, listed with `flagRetrieveInteractiveWindows`) has bounds from its input window's touchable region intersected with its frame (`AccessibilityWindowsPopulator.getTouchableRegionInWindow`): the keys, not the whole IME window.
   - `AccessibilityWindowManager.sendEventsForChangedWindowsLocked` sends `TYPE_WINDOWS_CHANGED` with `WINDOWS_CHANGE_ADDED`/`REMOVED`, or the changes from `AccessibilityWindowInfo.differenceFrom` (`WINDOWS_CHANGE_BOUNDS` when the region changes).
   - A service gets these only if `TYPE_WINDOWS_CHANGED` is in its event types, which `setServiceInfo` can change at runtime.
-  - Docking on the keyboard is **not yet confirmed on-device** (the user's keyboard is FUTO Keyboard).
+  - Docking on the keyboard was tried by the user with FUTO Keyboard (2026-10-12) and accepted as is (§8).
 
 **Media class names in the accessibility tree** (2026-10-09; AOSP `main`, androidx-main, Chromium `main`, Firefox `main`):
 - `ImageView.getAccessibilityClassName` → `android.widget.ImageView`; `VideoView` → `android.widget.VideoView`. `SurfaceView` and `TextureView` don't override it, so they report `View.getAccessibilityClassName` = `android.view.View`.
