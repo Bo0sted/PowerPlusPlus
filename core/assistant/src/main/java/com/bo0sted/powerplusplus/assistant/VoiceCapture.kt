@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import com.bo0sted.powerplusplus.whisper.SpeechDetector
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -12,19 +13,27 @@ import java.io.IOException
 import kotlin.coroutines.coroutineContext
 import kotlin.math.sqrt
 
-/** Records from the microphone until one utterance is complete (see [Endpointer]) or the user stops it. */
+/**
+ * Records from the microphone until one utterance is complete or the user stops it. Whether someone
+ * is speaking comes from [SpeechDetector] (see [Endpointer]); loudness only drives the voice wave.
+ */
 internal object VoiceCapture {
 
     const val SAMPLE_RATE = 16_000
 
     /**
-     * Records one utterance as 16 kHz mono samples in -1..1, reporting each frame's loudness (0..1)
+     * Records one utterance as 16 kHz mono samples in -1..1, reporting each window's loudness (0..1)
      * to [onLevel] as it goes. Once [stop] completes, it returns at once with what was said so far
      * (everything recorded, if speech hadn't clearly started). The microphone is released when this
-     * returns or is cancelled. The caller checks the RECORD_AUDIO permission first.
+     * returns or is cancelled. [detector] is reset first and used only from this call. The caller
+     * checks the RECORD_AUDIO permission first.
      */
     @SuppressLint("MissingPermission")
-    suspend fun nextUtterance(stop: Deferred<Unit>, onLevel: (Float) -> Unit): FloatArray = withContext(Dispatchers.IO) {
+    suspend fun nextUtterance(
+        stop: Deferred<Unit>,
+        detector: SpeechDetector,
+        onLevel: (Float) -> Unit,
+    ): FloatArray = withContext(Dispatchers.IO) {
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT)
         val record = AudioRecord(
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
@@ -35,6 +44,7 @@ internal object VoiceCapture {
         )
         try {
             if (record.state != AudioRecord.STATE_INITIALIZED) throw IOException("The microphone isn't available")
+            detector.reset()
             record.startRecording()
             val endpointer = Endpointer()
             val frame = FloatArray(Endpointer.FRAME_SAMPLES)
@@ -55,11 +65,10 @@ internal object VoiceCapture {
                     if (read < 0) throw IOException("Microphone read failed ($read)")
                     filled += read
                 }
-                val rms = rms(frame)
-                onLevel((sqrt(rms / LOUD_RMS)).coerceIn(0f, 1f))
+                onLevel((sqrt(rms(frame) / LOUD_RMS)).coerceIn(0f, 1f))
                 val copy = frame.copyOf()
                 if (recorded.size < Endpointer.MAX_FRAMES) recorded.add(copy)
-                when (endpointer.next(rms)) {
+                when (endpointer.next(detector.speechProbability(copy))) {
                     Endpointer.Event.Waiting -> {
                         preRoll.addLast(copy)
                         if (preRoll.size > Endpointer.PRE_ROLL_FRAMES) preRoll.removeFirst()
@@ -73,7 +82,6 @@ internal object VoiceCapture {
                         speech.add(copy)
                         utterance = concat(speech)
                     }
-                    Endpointer.Event.Discarded -> speech.clear()
                 }
             }
             utterance

@@ -1,9 +1,10 @@
-// JNI bridge between SpeechModel (Kotlin) and whisper.cpp. Kept deliberately thin: parameters are
+// JNI bridge between SpeechModel and SpeechDetector (Kotlin) and whisper.cpp. Kept deliberately thin: parameters are
 // chosen in Kotlin; this file only marshals arrays and strings.
 
 #include <jni.h>
 #include <android/log.h>
 
+#include <algorithm>
 #include <string>
 
 #include "ggml-backend.h"
@@ -44,7 +45,8 @@ Java_com_bo0sted_powerplusplus_whisper_WhisperNative_load(JNIEnv * env, jobject,
 // Returns UTF-8 bytes (NewStringUTF expects modified UTF-8 and aborts on 4-byte sequences), or null.
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_bo0sted_powerplusplus_whisper_WhisperNative_transcribe(
-        JNIEnv * env, jobject, jlong handle, jfloatArray samples, jstring language, jint threads, jint audio_ctx) {
+        JNIEnv * env, jobject, jlong handle, jfloatArray samples, jstring language, jint threads, jint audio_ctx,
+        jfloatArray no_speech_out) {
     auto * context = reinterpret_cast<whisper_context *>(handle);
     std::string lang = to_string(env, language);
 
@@ -69,8 +71,13 @@ Java_com_bo0sted_powerplusplus_whisper_WhisperNative_transcribe(
     env->ReleaseFloatArrayElements(samples, pcm, JNI_ABORT);
     if (status != 0) return nullptr;
 
+    // Whisper's own estimate that the audio held no speech, from its first decoding step.
+    const int segments = whisper_full_n_segments(context);
+    jfloat no_speech = segments > 0 ? whisper_full_get_segment_no_speech_prob(context, 0) : 1.0f;
+    env->SetFloatArrayRegion(no_speech_out, 0, 1, &no_speech);
+
     std::string text;
-    for (int i = 0; i < whisper_full_n_segments(context); i++) text += whisper_full_get_segment_text(context, i);
+    for (int i = 0; i < segments; i++) text += whisper_full_get_segment_text(context, i);
     jbyteArray result = env->NewByteArray(static_cast<jsize>(text.size()));
     env->SetByteArrayRegion(result, 0, static_cast<jsize>(text.size()), reinterpret_cast<const jbyte *>(text.data()));
     return result;
@@ -79,4 +86,38 @@ Java_com_bo0sted_powerplusplus_whisper_WhisperNative_transcribe(
 extern "C" JNIEXPORT void JNICALL
 Java_com_bo0sted_powerplusplus_whisper_WhisperNative_free(JNIEnv *, jobject, jlong handle) {
     whisper_free(reinterpret_cast<whisper_context *>(handle));
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_bo0sted_powerplusplus_whisper_WhisperNative_vadLoad(JNIEnv * env, jobject, jstring model_path) {
+    whisper_vad_context_params params = whisper_vad_default_context_params();
+    params.n_threads = 1;  // One 32 ms window at a time: more threads only add overhead.
+    params.use_gpu = false;
+    return reinterpret_cast<jlong>(whisper_vad_init_from_file_with_params(to_string(env, model_path).c_str(), params));
+}
+
+// The highest speech probability among the model's windows in samples (one, when called with exactly
+// one window), keeping the model's state for the next call. -1 on failure.
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_bo0sted_powerplusplus_whisper_WhisperNative_vadProbability(JNIEnv * env, jobject, jlong handle, jfloatArray samples) {
+    auto * context = reinterpret_cast<whisper_vad_context *>(handle);
+    jsize count = env->GetArrayLength(samples);
+    jfloat * pcm = env->GetFloatArrayElements(samples, nullptr);
+    bool ok = whisper_vad_detect_speech_no_reset(context, pcm, count);
+    env->ReleaseFloatArrayElements(samples, pcm, JNI_ABORT);
+    if (!ok) return -1.0f;
+    const float * probs = whisper_vad_probs(context);
+    float highest = 0.0f;
+    for (int i = 0; i < whisper_vad_n_probs(context); i++) highest = std::max(highest, probs[i]);
+    return highest;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bo0sted_powerplusplus_whisper_WhisperNative_vadReset(JNIEnv *, jobject, jlong handle) {
+    whisper_vad_reset_state(reinterpret_cast<whisper_vad_context *>(handle));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_bo0sted_powerplusplus_whisper_WhisperNative_vadFree(JNIEnv *, jobject, jlong handle) {
+    whisper_vad_free(reinterpret_cast<whisper_vad_context *>(handle));
 }

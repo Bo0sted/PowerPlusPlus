@@ -7,7 +7,10 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** The downloadable speech models (see [ComponentStore]); a model counts as installed once it loads. */
+/**
+ * The downloadable speech models, each with its speech detector (see [ComponentStore]); one counts
+ * as installed once both load.
+ */
 @Singleton
 class WhisperModels @Inject constructor(@ApplicationContext private val context: Context) : ComponentStore<WhisperModel>(
     root = File(context.noBackupFilesDir, "whisper"),
@@ -19,8 +22,11 @@ class WhisperModels @Inject constructor(@ApplicationContext private val context:
 
     fun modelFile(model: WhisperModel) = File(directory(model), WhisperCatalog.MODEL_FILE)
 
+    fun speechDetectorFile(model: WhisperModel) = File(directory(model), WhisperCatalog.SPEECH_DETECTOR_FILE)
+
     override fun finishInstall(component: WhisperModel, directory: File) {
         SpeechModel.load(context, File(directory, WhisperCatalog.MODEL_FILE), component.language).close()
+        SpeechDetector.load(context, File(directory, WhisperCatalog.SPEECH_DETECTOR_FILE)).close()
     }
 
     internal companion object {

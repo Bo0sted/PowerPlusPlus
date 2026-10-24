@@ -61,7 +61,7 @@
     <string name="assistant_title">Whisper assistant</string>
     <string name="assistant_body">While the panel is open, speak a command. Speech is recognised on this phone with Whisper; no audio leaves it. The assistant listens only when a speech model is downloaded and at least one command is on.</string>
     <string name="assistant_model_name">Whisper %1$s</string>
-    <string name="assistant_model_source">FUTO\'s fine-tune for short audio, from FUTO (keyboard.futo.org)</string>
+    <string name="assistant_model_source">FUTO\'s fine-tune for short audio (keyboard.futo.org), with Silero\'s speech detector (ggml-org on Hugging Face). One download.</string>
     <string name="assistant_microphone">Microphone</string>
     <string name="assistant_microphone_granted">Allowed. Used only while the panel is open.</string>
     <string name="assistant_microphone_needed">Needed to hear commands.</string>

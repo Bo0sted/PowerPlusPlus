@@ -13,13 +13,14 @@ import kotlin.math.min
  */
 class SpeechModel private constructor(private var handle: Long, private val language: String) : Closeable {
 
-    /** The text spoken in [samples] (16 kHz mono, -1..1), trimmed; empty if nothing was recognised. */
+    /** What was said in [samples] (16 kHz mono, -1..1). */
     @Synchronized
-    fun transcribe(samples: FloatArray): String {
+    fun transcribe(samples: FloatArray): Transcript {
         check(handle != 0L) { "closed" }
-        val bytes = WhisperNative.transcribe(handle, samples, language, THREADS, audioContext(samples.size))
+        val noSpeech = FloatArray(1)
+        val bytes = WhisperNative.transcribe(handle, samples, language, THREADS, audioContext(samples.size), noSpeech)
             ?: throw IOException("whisper.cpp couldn't transcribe the audio")
-        return bytes.toString(Charsets.UTF_8).trim()
+        return Transcript(bytes.toString(Charsets.UTF_8).trim(), noSpeech[0])
     }
 
     @Synchronized
@@ -50,6 +51,13 @@ class SpeechModel private constructor(private var handle: Long, private val lang
     }
 }
 
+/**
+ * What Whisper made of some audio: [text], trimmed (empty if nothing was recognised), and
+ * [noSpeechProbability], Whisper's own estimate (0..1) that there was no speech at all. Whisper
+ * always produces some text, even for noise ("I", "you"), so a high value means the text is made up.
+ */
+data class Transcript(val text: String, val noSpeechProbability: Float)
+
 /** The JNI functions in `powerpp_whisper.cpp`. */
 internal object WhisperNative {
     @Volatile private var loaded = false
@@ -71,6 +79,12 @@ internal object WhisperNative {
 
     external fun loadBackends(libraryDir: String)
     external fun load(modelPath: String): Long
-    external fun transcribe(handle: Long, samples: FloatArray, language: String, threads: Int, audioContext: Int): ByteArray?
+    /** [noSpeechOut] receives the no-speech probability (one element). */
+    external fun transcribe(handle: Long, samples: FloatArray, language: String, threads: Int, audioContext: Int, noSpeechOut: FloatArray): ByteArray?
     external fun free(handle: Long)
+
+    external fun vadLoad(modelPath: String): Long
+    external fun vadProbability(handle: Long, samples: FloatArray): Float
+    external fun vadReset(handle: Long)
+    external fun vadFree(handle: Long)
 }
