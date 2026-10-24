@@ -119,7 +119,7 @@ class PanelController @Inject constructor(
         val density = host.service.resources.displayMetrics.density
         val backdrop = when (config.value.backdrop) {
             Backdrop.Blur -> OverlayBackdrop.Blur(radiusPx = (BLUR_RADIUS_DP * density).roundToInt())
-            Backdrop.Dim -> OverlayBackdrop.Dim()
+            Backdrop.Dim -> OverlayBackdrop.Dim(DIM_AMOUNT)
         }
 
         val assistantSession = assistant.open(host.scope)
@@ -187,5 +187,8 @@ class PanelController @Inject constructor(
     private companion object {
         const val TAG = "PowerPP.Panel"
         const val BLUR_RADIUS_DP = 24
+
+        /** The Dim backdrop's black (user, 2026-10-24: darker than the 0.6 default). */
+        const val DIM_AMOUNT = 0.8f
     }
 }
