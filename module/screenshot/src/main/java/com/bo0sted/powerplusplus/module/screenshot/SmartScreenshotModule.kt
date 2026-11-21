@@ -149,9 +149,14 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
                     }
                     ScreenshotAction.Edit -> {
                         // The editor takes ownership of the crop. Started while our overlay is still
-                        // visible, which is what allows the activity start (see Share).
+                        // visible, which is what allows the activity start (see Share). Without
+                        // CLEAR_TASK, an editor left in the background would just come back with
+                        // its old image instead of a new one taking this crop.
                         EditorSession.put(cropped)
-                        service.startActivity(Intent(service, EditorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        service.startActivity(
+                            Intent(service, EditorActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                        )
                         close()
                         return@launch
                     }
