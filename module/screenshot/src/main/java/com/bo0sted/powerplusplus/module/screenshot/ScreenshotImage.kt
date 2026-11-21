@@ -13,14 +13,22 @@ import kotlin.math.roundToInt
 /** Cropping for screenshots. Can be slow; call it off the main thread. */
 internal object ScreenshotImage {
 
-    /** Crops [selection]; a [SelectionShape.Circle] gets transparent pixels outside the circle. */
+    /**
+     * Crops [selection]; a [SelectionShape.Circle] gets transparent pixels outside the circle.
+     * Always a new bitmap, never [bitmap] itself, so the caller can recycle the two separately.
+     */
     fun crop(bitmap: Bitmap, selection: Rect, shape: SelectionShape): Bitmap {
         val left = selection.left.roundToInt().coerceIn(0, bitmap.width - 1)
         val top = selection.top.roundToInt().coerceIn(0, bitmap.height - 1)
         val right = selection.right.roundToInt().coerceIn(left + 1, bitmap.width)
         val bottom = selection.bottom.roundToInt().coerceIn(top + 1, bitmap.height)
         val region = Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
-        if (shape != SelectionShape.Circle) return region
+        if (shape != SelectionShape.Circle) {
+            // createBitmap returns an immutable source itself when the region covers all of it
+            // (Max, or a strip resized to the whole screen).
+            if (region !== bitmap) return region
+            return checkNotNull(bitmap.copy(Bitmap.Config.ARGB_8888, false)) { "Couldn't copy the screenshot" }
+        }
 
         val circle = createBitmap(region.width, region.height)
         Canvas(circle).apply {

@@ -33,6 +33,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,10 +77,21 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
         // Media on the current image, found on the first Scan; a Retake makes them stale.
         var media: List<IntRect>? = null
         val cycle = RegionCycle()
+        // Work that reads the image (a crop, a scan); it's recycled only once these are over.
+        val jobs = mutableListOf<Job>()
+        fun <T : Job> T.readingImage(): T = also {
+            jobs.removeAll { !it.isActive }
+            jobs += it
+        }
         fun close() {
             if (!window.isShowing) return
             window.dismiss()
-            image.recycle()
+            val last = image
+            val running = jobs.toList()
+            host.scope.launch {
+                running.forEach { it.join() }
+                last.recycle()
+            }
         }
         /** Shows [message], then closes; for successes the user should still see confirmed. */
         fun confirmAndClose(message: Int) {
@@ -115,8 +128,9 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
             if (busy) return
             busy = true
             notice = null
+            val source = image
             host.scope.launch {
-                val cropped = withContext(Dispatchers.Default) { ScreenshotImage.crop(image, selection, shape) }
+                val cropped = withContext(Dispatchers.Default) { ScreenshotImage.crop(source, selection, shape) }
                 // A failure keeps the window open so the user can try again.
                 var failed = false
                 when (action) {
@@ -158,14 +172,16 @@ class SmartScreenshotModule @Inject constructor() : ActionModule {
                     notice = R.string.screenshot_failed
                     busy = false
                 }
-            }
+            }.readingImage()
         }
 
         /** The next media region for [selection] (repeated taps step through them), or `null`. */
         suspend fun scan(selection: Rect): Rect? {
             notice = null
             val source = image
-            val found = media ?: MediaFinder.all(service, source).also { if (image === source) media = it }
+            // Run in the module's scope, not the screen's, so closing waits for it before recycling.
+            val found = media ?: host.scope.async { MediaFinder.all(service, source) }.readingImage().await()
+                .also { if (image === source) media = it }
             val next = cycle.next(found, selection.toPixels())
             if (next == null) notice = R.string.screenshot_scan_none
             return next?.let { Rect(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) }

@@ -42,6 +42,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val effects = mutableStateMapOf<Pair<EffectKind, Int>, ImageBitmap>()
     private val computing = mutableSetOf<Pair<EffectKind, Int>>()
 
+    /** How many background calls are reading [source] or [effects]. Main thread only. */
+    private var reading = 0
+
     private val settingsStore = EditorSettingsStore(application)
     val settings: StateFlow<EditorSettings> =
         settingsStore.settings.stateIn(viewModelScope, SharingStarted.Eagerly, EditorSettings())
@@ -80,9 +83,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val key = EditorEffects.cacheKey(kind, strength)
         if (key in effects || !computing.add(key)) return
         viewModelScope.launch {
-            val processed = withContext(Dispatchers.Default) { EditorEffects.apply(base, kind, strength) }
+            val processed = offMain { EditorEffects.apply(base, kind, strength) }
             effects[key] = processed.asImageBitmap()
             computing -= key
+        }
+    }
+
+    /**
+     * Runs [block] on a background thread. It can't be stopped once started, so [onCleared] doesn't
+     * recycle anything while one is running; the editor may close during a render or an effect.
+     */
+    private suspend fun <T> offMain(block: () -> T): T {
+        reading++
+        try {
+            return withContext(Dispatchers.Default) { block() }
+        } finally {
+            reading--
         }
     }
 
@@ -91,8 +107,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val base = source ?: return null
         val image = image ?: return null
         val marks = history.marks
-        return withContext(Dispatchers.Default) {
-            val ready = HashMap(effects)
+        val ready = HashMap(effects)
+        return offMain {
             val extra = ArrayList<Bitmap>()
             marks.filterIsInstance<Mark.Effect>().forEach { effect ->
                 val key = EditorEffects.cacheKey(effect.kind, effect.strength)
@@ -113,6 +129,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        // A render or effect still running reads these; they're left to the garbage collector.
+        if (reading > 0) return
         effects.values.map { it.asAndroidBitmap() }.filter { it !== source }.forEach { it.recycle() }
         source?.recycle()
     }
